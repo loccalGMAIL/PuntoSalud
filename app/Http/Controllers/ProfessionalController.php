@@ -19,7 +19,7 @@ class ProfessionalController extends Controller
             ->orderBy('first_name')
             ->get();
 
-        return Inertia::render('Professionals/Index', [
+        return Inertia::render('professionals/index', [
             'professionals' => $professionals
         ]);
     }
