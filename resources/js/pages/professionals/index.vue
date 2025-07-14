@@ -2,6 +2,22 @@
 import AppLayout from '@/layouts/AppLayout.vue';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { 
+    Table, 
+    TableBody, 
+    TableCell, 
+    TableHead, 
+    TableHeader, 
+    TableRow 
+} from '@/components/ui/table';
+import { 
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { 
     DropdownMenu,
     DropdownMenuContent,
@@ -10,7 +26,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { type BreadcrumbItem } from '@/types';
-import { Head, Link, router } from '@inertiajs/vue3';
+import { Head, router } from '@inertiajs/vue3';
 import { 
     Plus, 
     Search, 
@@ -23,6 +39,8 @@ import {
 } from 'lucide-vue-next';
 import { ref, computed } from 'vue';
 
+// Import del modal
+import ProfessionalModal from './ProfessionalModal.vue';
 interface Specialty {
     id: number;
     name: string;
@@ -46,6 +64,7 @@ interface Professional {
 
 interface Props {
     professionals: Professional[];
+    specialties: Specialty[];
 }
 
 const props = defineProps<Props>();
@@ -60,16 +79,12 @@ const searchTerm = ref('');
 const selectedSpecialty = ref('all');
 const selectedStatus = ref('all');
 
-// Opciones de filtros
-const specialties = computed(() => {
-    const uniqueSpecialties = props.professionals.reduce((acc, prof) => {
-        if (!acc.find(s => s.id === prof.specialty.id)) {
-            acc.push(prof.specialty);
-        }
-        return acc;
-    }, [] as Specialty[]);
-    return uniqueSpecialties;
-});
+// Estados del modal
+const modalOpen = ref(false);
+const editingProfessional = ref<Professional | null>(null);
+
+// Opciones de filtros (ya no necesitamos calcularlas, vienen como prop)
+const specialtyOptions = computed(() => props.specialties);
 
 // Profesionales filtrados
 const filteredProfessionals = computed(() => {
@@ -98,10 +113,26 @@ const stats = computed(() => {
     const total = props.professionals.length;
     const active = props.professionals.filter(p => p.is_active).length;
     const inactive = total - active;
-    const specialtiesCount = specialties.value.length;
+    const specialtiesCount = props.specialties.length;
 
     return { total, active, inactive, specialtiesCount };
 });
+
+// Funciones del modal
+const openCreateModal = () => {
+    editingProfessional.value = null;
+    modalOpen.value = true;
+};
+
+const openEditModal = (professional: Professional) => {
+    editingProfessional.value = professional;
+    modalOpen.value = true;
+};
+
+const handleModalSuccess = () => {
+    // Refrescar la página para obtener los datos actualizados
+    router.reload({ only: ['professionals'] });
+};
 
 // Funciones de acciones
 const toggleStatus = (professional: Professional) => {
@@ -109,13 +140,12 @@ const toggleStatus = (professional: Professional) => {
     if (confirm(`¿Estás seguro de ${action} este profesional?`)) {
         router.patch(`/professionals/${professional.id}`, {
             is_active: !professional.is_active
+        }, {
+            preserveScroll: true,
+            onSuccess: () => {
+                router.reload({ only: ['professionals'] });
+            }
         });
-    }
-};
-
-const deleteProfessional = (professional: Professional) => {
-    if (confirm(`¿Estás seguro de eliminar al profesional ${professional.first_name} ${professional.last_name}?`)) {
-        router.delete(`/professionals/${professional.id}`);
     }
 };
 
@@ -142,11 +172,9 @@ const clearFilters = () => {
                             Gestiona los profesionales médicos del centro
                         </p>
                     </div>
-                    <Button as-child>
-                        <Link :href="route('professionals.create')">
-                            <Plus class="mr-2 h-4 w-4" />
-                            Nuevo Profesional
-                        </Link>
+                    <Button @click="openCreateModal">
+                        <Plus class="mr-2 h-4 w-4" />
+                        Nuevo Profesional
                     </Button>
                 </div>
 
@@ -228,32 +256,36 @@ const clearFilters = () => {
                         <!-- Filtro por especialidad -->
                         <div class="min-w-[200px]">
                             <label class="text-sm font-medium">Especialidad</label>
-                            <select 
-                                v-model="selectedSpecialty" 
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                <option value="all">Todas las especialidades</option>
-                                <option 
-                                    v-for="specialty in specialties" 
-                                    :key="specialty.id" 
-                                    :value="specialty.id.toString()"
-                                >
-                                    {{ specialty.name }}
-                                </option>
-                            </select>
+                            <Select v-model="selectedSpecialty">
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Todas las especialidades" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Todas las especialidades</SelectItem>
+                                    <SelectItem 
+                                        v-for="specialty in specialtyOptions" 
+                                        :key="specialty.id" 
+                                        :value="specialty.id.toString()"
+                                    >
+                                        {{ specialty.name }}
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         <!-- Filtro por estado -->
                         <div class="min-w-[150px]">
                             <label class="text-sm font-medium">Estado</label>
-                            <select 
-                                v-model="selectedStatus"
-                                class="flex h-10 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                            >
-                                <option value="all">Todos</option>
-                                <option value="active">Activos</option>
-                                <option value="inactive">Inactivos</option>
-                            </select>
+                            <Select v-model="selectedStatus">
+                                <SelectTrigger>
+                                    <SelectValue placeholder="Todos los estados" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">Todos</SelectItem>
+                                    <SelectItem value="active">Activos</SelectItem>
+                                    <SelectItem value="inactive">Inactivos</SelectItem>
+                                </SelectContent>
+                            </Select>
                         </div>
 
                         <!-- Botón limpiar filtros -->
@@ -269,146 +301,127 @@ const clearFilters = () => {
                 </CardContent>
             </Card>
 
-            <!-- Lista de profesionales -->
+            <!-- Tabla de profesionales -->
             <Card>
                 <CardHeader>
                     <CardTitle>Lista de Profesionales</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    <!-- Header de la tabla -->
-                    <div class="hidden md:grid md:grid-cols-7 gap-4 p-4 border-b bg-muted/50 rounded-t-lg">
-                        <div class="font-medium text-sm">Profesional</div>
-                        <div class="font-medium text-sm">Especialidad</div>
-                        <div class="font-medium text-sm">Contacto</div>
-                        <div class="font-medium text-sm">Matrícula</div>
-                        <div class="font-medium text-sm">Comisión</div>
-                        <div class="font-medium text-sm">Estado</div>
-                        <div class="font-medium text-sm text-right">Acciones</div>
-                    </div>
+                    <div class="rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Profesional</TableHead>
+                                    <TableHead>Especialidad</TableHead>
+                                    <TableHead>Contacto</TableHead>
+                                    <TableHead>Matrícula</TableHead>
+                                    <TableHead>Comisión</TableHead>
+                                    <TableHead>Estado</TableHead>
+                                    <TableHead class="text-right">Acciones</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                <TableRow v-if="filteredProfessionals.length === 0">
+                                    <TableCell colspan="7" class="h-24 text-center">
+                                        <div class="flex flex-col items-center gap-2">
+                                            <p class="text-muted-foreground">No se encontraron profesionales</p>
+                                            <Button variant="outline" size="sm" @click="clearFilters">
+                                                Limpiar filtros
+                                            </Button>
+                                        </div>
+                                    </TableCell>
+                                </TableRow>
+                                
+                                <TableRow 
+                                    v-for="professional in filteredProfessionals" 
+                                    :key="professional.id"
+                                    :class="{ 'opacity-60': !professional.is_active }"
+                                >
+                                    <!-- Profesional -->
+                                    <TableCell>
+                                        <div class="flex flex-col">
+                                            <span class="font-medium">
+                                                {{ professional.first_name }} {{ professional.last_name }}
+                                            </span>
+                                            <span class="text-sm text-muted-foreground">
+                                                {{ professional.email }}
+                                            </span>
+                                        </div>
+                                    </TableCell>
 
-                    <!-- Sin resultados -->
-                    <div v-if="filteredProfessionals.length === 0" class="h-24 flex flex-col items-center justify-center">
-                        <p class="text-muted-foreground">No se encontraron profesionales</p>
-                        <Button variant="outline" size="sm" class="mt-2" @click="clearFilters">
-                            Limpiar filtros
-                        </Button>
-                    </div>
-                    
-                    <!-- Lista de profesionales -->
-                    <div v-else class="divide-y">
-                        <div 
-                            v-for="professional in filteredProfessionals" 
-                            :key="professional.id"
-                            :class="[
-                                'grid grid-cols-1 md:grid-cols-7 gap-4 p-4 hover:bg-muted/30 transition-colors',
-                                { 'opacity-60': !professional.is_active }
-                            ]"
-                        >
-                            <!-- Profesional -->
-                            <div class="flex flex-col">
-                                <span class="font-medium">
-                                    {{ professional.first_name }} {{ professional.last_name }}
-                                </span>
-                                <span class="text-sm text-muted-foreground">
-                                    {{ professional.email }}
-                                </span>
-                                <!-- Mobile: mostrar info adicional -->
-                                <div class="md:hidden mt-2 space-y-1">
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-xs font-medium">Especialidad:</span>
-                                        <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-secondary text-secondary-foreground">
+                                    <!-- Especialidad -->
+                                    <TableCell>
+                                        <Badge variant="secondary">
                                             {{ professional.specialty.name }}
+                                        </Badge>
+                                    </TableCell>
+
+                                    <!-- Contacto -->
+                                    <TableCell>
+                                        <span class="text-sm">
+                                            {{ professional.phone || 'Sin teléfono' }}
                                         </span>
-                                    </div>
-                                    <div class="flex items-center gap-2">
-                                        <span class="text-xs font-medium">Estado:</span>
-                                        <span :class="[
-                                            'inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
-                                            professional.is_active 
-                                                ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' 
-                                                : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
-                                        ]">
+                                    </TableCell>
+
+                                    <!-- Matrícula -->
+                                    <TableCell>
+                                        <Badge variant="outline" class="font-mono">
+                                            {{ professional.license_number }}
+                                        </Badge>
+                                    </TableCell>
+
+                                    <!-- Comisión -->
+                                    <TableCell>
+                                        <span class="font-medium">{{ professional.commission_percentage }}%</span>
+                                    </TableCell>
+
+                                    <!-- Estado -->
+                                    <TableCell>
+                                        <Badge :variant="professional.is_active ? 'default' : 'destructive'">
                                             {{ professional.is_active ? 'Activo' : 'Inactivo' }}
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
+                                        </Badge>
+                                    </TableCell>
 
-                            <!-- Especialidad (solo desktop) -->
-                            <div class="hidden md:flex">
-                                <span class="inline-flex items-center rounded-full px-2 py-1 text-xs font-medium bg-secondary text-secondary-foreground">
-                                    {{ professional.specialty.name }}
-                                </span>
-                            </div>
-
-                            <!-- Contacto (solo desktop) -->
-                            <div class="hidden md:block">
-                                <span class="text-sm">
-                                    {{ professional.phone || 'Sin teléfono' }}
-                                </span>
-                            </div>
-
-                            <!-- Matrícula (solo desktop) -->
-                            <div class="hidden md:block">
-                                <code class="text-sm bg-muted px-1 py-0.5 rounded">{{ professional.license_number }}</code>
-                            </div>
-
-                            <!-- Comisión (solo desktop) -->
-                            <div class="hidden md:block">
-                                <span class="font-medium">{{ professional.commission_percentage }}%</span>
-                            </div>
-
-                            <!-- Estado (solo desktop) -->
-                            <div class="hidden md:flex">
-                                <span :class="[
-                                    'inline-flex items-center rounded-full px-2 py-1 text-xs font-medium',
-                                    professional.is_active 
-                                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' 
-                                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-300'
-                                ]">
-                                    {{ professional.is_active ? 'Activo' : 'Inactivo' }}
-                                </span>
-                            </div>
-
-                            <!-- Acciones -->
-                            <div class="flex justify-end">
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger as-child>
-                                        <Button variant="ghost" class="h-8 w-8 p-0">
-                                            <span class="sr-only">Abrir menú</span>
-                                            <MoreHorizontal class="h-4 w-4" />
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent align="end">
-                                        <DropdownMenuItem as-child>
-                                            <Link :href="route('professionals.show', professional.id)">
-                                                <Eye class="mr-2 h-4 w-4" />
-                                                Ver detalles
-                                            </Link>
-                                        </DropdownMenuItem>
-                                        
-                                        <DropdownMenuItem as-child>
-                                            <Link :href="route('professionals.edit', professional.id)">
-                                                <Edit class="mr-2 h-4 w-4" />
-                                                Editar
-                                            </Link>
-                                        </DropdownMenuItem>
-                                        
-                                        <DropdownMenuItem 
-                                            @click="toggleStatus(professional)"
-                                            :class="professional.is_active ? 'text-red-600' : 'text-green-600'"
-                                        >
-                                            <UserX v-if="professional.is_active" class="mr-2 h-4 w-4" />
-                                            <UserCheck v-else class="mr-2 h-4 w-4" />
-                                            {{ professional.is_active ? 'Desactivar' : 'Activar' }}
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            </div>
-                        </div>
+                                    <!-- Acciones -->
+                                    <TableCell class="text-right">
+                                        <DropdownMenu>
+                                            <DropdownMenuTrigger as-child>
+                                                <Button variant="ghost" class="h-8 w-8 p-0">
+                                                    <span class="sr-only">Abrir menú</span>
+                                                    <MoreHorizontal class="h-4 w-4" />
+                                                </Button>
+                                            </DropdownMenuTrigger>
+                                            <DropdownMenuContent align="end">
+                                                <DropdownMenuItem @click="openEditModal(professional)">
+                                                    <Edit class="mr-2 h-4 w-4" />
+                                                    Editar
+                                                </DropdownMenuItem>
+                                                
+                                                <DropdownMenuItem 
+                                                    @click="toggleStatus(professional)"
+                                                    :class="professional.is_active ? 'text-red-600' : 'text-green-600'"
+                                                >
+                                                    <UserX v-if="professional.is_active" class="mr-2 h-4 w-4" />
+                                                    <UserCheck v-else class="mr-2 h-4 w-4" />
+                                                    {{ professional.is_active ? 'Desactivar' : 'Activar' }}
+                                                </DropdownMenuItem>
+                                            </DropdownMenuContent>
+                                        </DropdownMenu>
+                                    </TableCell>
+                                </TableRow>
+                            </TableBody>
+                        </Table>
                     </div>
                 </CardContent>
             </Card>
         </div>
+
+        <!-- Modal de Profesional -->
+        <ProfessionalModal
+            v-model:open="modalOpen"
+            :professional="editingProfessional"
+            :specialties="specialties"
+            @success="handleModalSuccess"
+        />
     </AppLayout>
 </template>

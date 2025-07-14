@@ -19,8 +19,11 @@ class ProfessionalController extends Controller
             ->orderBy('first_name')
             ->get();
 
+        $specialties = Specialty::active()->orderBy('name')->get(); // ⭐ Agregado
+
         return Inertia::render('professionals/index', [
-            'professionals' => $professionals
+            'professionals' => $professionals,
+            'specialties' => $specialties  // ⭐ Agregado
         ]);
     }
 
@@ -41,8 +44,6 @@ class ProfessionalController extends Controller
      */
     public function store(Request $request)
     {
-        // Por ahora dejamos la validación básica
-        // Después la mejoraremos con un FormRequest
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',
@@ -89,6 +90,17 @@ class ProfessionalController extends Controller
      */
     public function update(Request $request, Professional $professional)
     {
+        // ⭐ ARREGLO: Detectar si es solo toggle de estado o actualización completa
+        if ($request->has('is_active') && count($request->all()) === 1) {
+            // Solo cambiar el estado
+            $professional->update([
+                'is_active' => $request->boolean('is_active')
+            ]);
+
+            return back()->with('success', 'Estado del profesional actualizado.');
+        }
+
+        // Actualización completa del profesional
         $validated = $request->validate([
             'first_name' => 'required|string|max:255',
             'last_name' => 'required|string|max:255',

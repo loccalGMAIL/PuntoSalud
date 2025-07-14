@@ -21,6 +21,9 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Rutas para profesionales
     Route::resource('professionals', ProfessionalController::class);
+
+    // Rutas para especialidades
+    Route::resource('specialties', App\Http\Controllers\SpecialtyController::class);
 });
 
 require __DIR__.'/settings.php';
