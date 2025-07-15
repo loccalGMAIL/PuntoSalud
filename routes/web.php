@@ -4,14 +4,13 @@ use Illuminate\Support\Facades\Route;
 use Inertia\Inertia;
 
 use App\Http\Controllers\ProfessionalController;
+use App\Http\Controllers\SpecialtyController;
+use App\Http\Controllers\PatientController;
+use App\Http\Controllers\AppointmentController;
 
 Route::get('/', function () {
     return Inertia::render('auth/Login');
 })->name('home');
-
-// Route::get('dashboard', function () {
-//     return Inertia::render('Dashboard');
-// })->middleware(['auth', 'verified'])->name('dashboard');
 
 
 Route::middleware(['auth', 'verified'])->group(function () {
@@ -23,7 +22,13 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::resource('professionals', ProfessionalController::class);
 
     // Rutas para especialidades
-    Route::resource('specialties', App\Http\Controllers\SpecialtyController::class);
+    Route::resource('specialties', SpecialtyController::class);
+
+    // Rutas para pacientes
+    Route::resource('patients', PatientController::class);
+
+    // Rutas para citas
+    Route::resource('appointments', AppointmentController::class);
 });
 
 require __DIR__.'/settings.php';

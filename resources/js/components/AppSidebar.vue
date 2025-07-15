@@ -22,12 +22,12 @@ const mainNavItems: NavItem[] = [
     },
         {
         title: 'Pacientes',
-        href: '',
+        href: '/patients',
         icon: UsersRound ,
     },
         {
         title: 'Turnos',
-        href: '',
+        href: '/appointments',
         icon: CalendarHeart ,
     },
 ];
