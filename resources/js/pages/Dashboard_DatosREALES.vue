@@ -3,7 +3,48 @@ import AppLayout from '@/layouts/AppLayout.vue';
 import { type BreadcrumbItem } from '@/types';
 import { Head } from '@inertiajs/vue3';
 import { Calendar, DollarSign, Users, TrendingUp, Clock, CheckCircle, Activity, Heart } from 'lucide-vue-next';
-import PlaceholderPattern from '../components/PlaceholderPattern.vue';
+
+const props = defineProps<{
+    dashboardData: {
+        consultasHoy: {
+            total: number;
+            completadas: number;
+            pendientes: number;
+            canceladas: number;
+        };
+        ingresosHoy: {
+            total: number;
+            efectivo: number;
+            transferencia: number;
+        };
+        profesionalesActivos: {
+            total: number;
+            enConsulta: number;
+            disponibles: number;
+        };
+        consultasDetalle: Array<{
+            id: number;
+            paciente: string;
+            profesional: string;
+            hora: string;
+            monto: number;
+            status: string;
+            statusLabel: string;
+        }>;
+        resumenCaja: {
+            porProfesional: Array<{
+                nombre: string;
+                total: number;
+            }>;
+            totalGeneral: number;
+            formasPago: {
+                efectivo: number;
+                transferencia: number;
+            };
+        };
+        fecha: string;
+    }
+}>();
 
 const breadcrumbs: BreadcrumbItem[] = [
     {
@@ -12,31 +53,30 @@ const breadcrumbs: BreadcrumbItem[] = [
     },
 ];
 
-// Datos de ejemplo - estos vendrán del backend
-const dashboardData = {
-    consultasHoy: {
-        total: 12,
-        completadas: 8,
-        pendientes: 4
-    },
-    ingresosHoy: {
-        total: 84000,
-        efectivo: 54000,
-        transferencia: 30000
-    },
-    profesionalesActivos: {
-        total: 6,
-        enConsulta: 3,
-        disponibles: 3
-    }
-};
-
 const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('es-AR', {
         style: 'currency',
         currency: 'ARS',
         minimumFractionDigits: 0
     }).format(amount);
+};
+
+const getStatusColor = (status: string) => {
+    switch(status) {
+        case 'attended': return 'emerald';
+        case 'scheduled': return 'blue';
+        case 'cancelled': return 'red';
+        default: return 'gray';
+    }
+};
+
+const getStatusIcon = (status: string) => {
+    switch(status) {
+        case 'attended': return CheckCircle;
+        case 'scheduled': return Calendar;
+        case 'cancelled': return 'X';
+        default: return Clock;
+    }
 };
 </script>
 
@@ -54,20 +94,20 @@ const formatCurrency = (amount: number) => {
                         <div>
                             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Consultas del Día</p>
                             <div class="mt-2 flex items-baseline gap-2">
-                                <p class="text-3xl font-bold text-gray-900 dark:text-white transition-all duration-300 group-hover:scale-105">{{ dashboardData.consultasHoy.total }}</p>
-                                <span class="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1 animate-pulse">
+                                <p class="text-3xl font-bold text-gray-900 dark:text-white transition-all duration-300 group-hover:scale-105">{{ props.dashboardData.consultasHoy.total }}</p>
+                                <span class="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1" v-if="props.dashboardData.consultasHoy.total > 0">
                                     <TrendingUp class="h-3 w-3" />
-                                    +2 vs ayer
+                                    Activo
                                 </span>
                             </div>
                             <div class="mt-3 flex gap-4 text-xs">
                                 <div class="flex items-center gap-1">
                                     <CheckCircle class="h-3 w-3 text-emerald-600" />
-                                    <span class="text-gray-600 dark:text-gray-400">{{ dashboardData.consultasHoy.completadas }} completadas</span>
+                                    <span class="text-gray-600 dark:text-gray-400">{{ props.dashboardData.consultasHoy.completadas }} completadas</span>
                                 </div>
                                 <div class="flex items-center gap-1">
                                     <Clock class="h-3 w-3 text-amber-500" />
-                                    <span class="text-gray-600 dark:text-gray-400">{{ dashboardData.consultasHoy.pendientes }} pendientes</span>
+                                    <span class="text-gray-600 dark:text-gray-400">{{ props.dashboardData.consultasHoy.pendientes }} pendientes</span>
                                 </div>
                             </div>
                         </div>
@@ -85,20 +125,20 @@ const formatCurrency = (amount: number) => {
                         <div>
                             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Ingresos del Día</p>
                             <div class="mt-2 flex items-baseline gap-2">
-                                <p class="text-3xl font-bold text-gray-900 dark:text-white transition-all duration-300 group-hover:scale-105">{{ formatCurrency(dashboardData.ingresosHoy.total) }}</p>
-                                <span class="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1 animate-pulse">
+                                <p class="text-3xl font-bold text-gray-900 dark:text-white transition-all duration-300 group-hover:scale-105">{{ formatCurrency(props.dashboardData.ingresosHoy.total) }}</p>
+                                <span class="text-sm text-emerald-600 dark:text-emerald-400 flex items-center gap-1" v-if="props.dashboardData.ingresosHoy.total > 0">
                                     <TrendingUp class="h-3 w-3" />
-                                    +15%
+                                    Hoy
                                 </span>
                             </div>
                             <div class="mt-3 space-y-1 text-xs">
                                 <div class="flex justify-between text-gray-600 dark:text-gray-400">
                                     <span>Efectivo:</span>
-                                    <span class="font-medium text-emerald-700 dark:text-emerald-400">{{ formatCurrency(dashboardData.ingresosHoy.efectivo) }}</span>
+                                    <span class="font-medium text-emerald-700 dark:text-emerald-400">{{ formatCurrency(props.dashboardData.ingresosHoy.efectivo) }}</span>
                                 </div>
                                 <div class="flex justify-between text-gray-600 dark:text-gray-400">
                                     <span>Transferencia:</span>
-                                    <span class="font-medium text-emerald-700 dark:text-emerald-400">{{ formatCurrency(dashboardData.ingresosHoy.transferencia) }}</span>
+                                    <span class="font-medium text-emerald-700 dark:text-emerald-400">{{ formatCurrency(props.dashboardData.ingresosHoy.transferencia) }}</span>
                                 </div>
                             </div>
                         </div>
@@ -116,17 +156,17 @@ const formatCurrency = (amount: number) => {
                         <div>
                             <p class="text-sm font-medium text-gray-600 dark:text-gray-400">Profesionales Activos</p>
                             <div class="mt-2 flex items-baseline gap-2">
-                                <p class="text-3xl font-bold text-gray-900 dark:text-white transition-all duration-300 group-hover:scale-105">{{ dashboardData.profesionalesActivos.total }}</p>
-                                <span class="text-sm text-gray-500 dark:text-gray-400">de 8 total</span>
+                                <p class="text-3xl font-bold text-gray-900 dark:text-white transition-all duration-300 group-hover:scale-105">{{ props.dashboardData.profesionalesActivos.total }}</p>
+                                <span class="text-sm text-gray-500 dark:text-gray-400">activos hoy</span>
                             </div>
                             <div class="mt-3 flex gap-4 text-xs">
                                 <div class="flex items-center gap-1">
                                     <div class="h-2 w-2 rounded-full bg-red-500 animate-pulse"></div>
-                                    <span class="text-gray-600 dark:text-gray-400">{{ dashboardData.profesionalesActivos.enConsulta }} en consulta</span>
+                                    <span class="text-gray-600 dark:text-gray-400">{{ props.dashboardData.profesionalesActivos.enConsulta }} en consulta</span>
                                 </div>
                                 <div class="flex items-center gap-1">
                                     <div class="h-2 w-2 rounded-full bg-emerald-500 animate-pulse"></div>
-                                    <span class="text-gray-600 dark:text-gray-400">{{ dashboardData.profesionalesActivos.disponibles }} disponibles</span>
+                                    <span class="text-gray-600 dark:text-gray-400">{{ props.dashboardData.profesionalesActivos.disponibles }} disponibles</span>
                                 </div>
                             </div>
                         </div>
@@ -155,99 +195,30 @@ const formatCurrency = (amount: number) => {
                     </div>
                     
                     <div class="space-y-3">
-                        <!-- Consulta 1 -->
-                        <div class="group flex items-center justify-between p-4 rounded-lg border border-emerald-100 bg-white/80 transition-all duration-200 hover:border-emerald-200 hover:shadow-md dark:border-emerald-800/30 dark:bg-gray-800/50 dark:hover:border-emerald-700/50">
+                        <!-- Consultas dinámicas desde la base de datos -->
+                        <div v-for="consulta in props.dashboardData.consultasDetalle.slice(0, 5)" :key="consulta.id" 
+                             :class="`group flex items-center justify-between p-4 rounded-lg border bg-white/80 transition-all duration-200 hover:shadow-md dark:bg-gray-800/50 border-${getStatusColor(consulta.status)}-100 hover:border-${getStatusColor(consulta.status)}-200 dark:border-${getStatusColor(consulta.status)}-800/30 dark:hover:border-${getStatusColor(consulta.status)}-700/50`">
                             <div class="flex items-center gap-4">
-                                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 transition-transform duration-200 group-hover:scale-110 dark:bg-emerald-900/30">
-                                    <CheckCircle class="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
+                                <div :class="`flex h-10 w-10 items-center justify-center rounded-full transition-transform duration-200 group-hover:scale-110 bg-${getStatusColor(consulta.status)}-100 dark:bg-${getStatusColor(consulta.status)}-900/30`">
+                                    <component :is="getStatusIcon(consulta.status)" :class="`h-5 w-5 text-${getStatusColor(consulta.status)}-600 dark:text-${getStatusColor(consulta.status)}-400`" />
                                 </div>
                                 <div>
-                                    <p class="font-medium text-gray-900 dark:text-white">García, Luna Alejandra</p>
-                                    <p class="text-sm text-gray-600 dark:text-gray-400">Dr. Orlando Benjamín • 09:30</p>
+                                    <p class="font-medium text-gray-900 dark:text-white">{{ consulta.paciente }}</p>
+                                    <p class="text-sm text-gray-600 dark:text-gray-400">{{ consulta.profesional }} • {{ consulta.hora }}</p>
                                 </div>
                             </div>
                             <div class="text-right">
-                                <p class="font-semibold text-gray-900 dark:text-white">$7.000</p>
-                                <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
-                                    Completada
+                                <p class="font-semibold text-gray-900 dark:text-white">{{ formatCurrency(consulta.monto) }}</p>
+                                <span :class="`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-${getStatusColor(consulta.status)}-100 text-${getStatusColor(consulta.status)}-800 dark:bg-${getStatusColor(consulta.status)}-900/30 dark:text-${getStatusColor(consulta.status)}-400`">
+                                    {{ consulta.statusLabel }}
                                 </span>
                             </div>
                         </div>
 
-                        <!-- Consulta 2 -->
-                        <div class="group flex items-center justify-between p-4 rounded-lg border border-amber-100 bg-white/80 transition-all duration-200 hover:border-amber-200 hover:shadow-md dark:border-amber-800/30 dark:bg-gray-800/50 dark:hover:border-amber-700/50">
-                            <div class="flex items-center gap-4">
-                                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-amber-100 transition-transform duration-200 group-hover:scale-110 dark:bg-amber-900/30">
-                                    <Clock class="h-5 w-5 text-amber-600 dark:text-amber-400" />
-                                </div>
-                                <div>
-                                    <p class="font-medium text-gray-900 dark:text-white">Coronado, Felipe</p>
-                                    <p class="text-sm text-gray-600 dark:text-gray-400">Dra. García Luna Alejandra • 10:15</p>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <p class="font-semibold text-gray-900 dark:text-white">$8.500</p>
-                                <span class="inline-flex items-center rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-medium text-amber-800 dark:bg-amber-900/30 dark:text-amber-400">
-                                    En curso
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Consulta 3 -->
-                        <div class="group flex items-center justify-between p-4 rounded-lg border border-blue-100 bg-white/80 transition-all duration-200 hover:border-blue-200 hover:shadow-md dark:border-blue-800/30 dark:bg-gray-800/50 dark:hover:border-blue-700/50">
-                            <div class="flex items-center gap-4">
-                                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 transition-transform duration-200 group-hover:scale-110 dark:bg-blue-900/30">
-                                    <Calendar class="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                                </div>
-                                <div>
-                                    <p class="font-medium text-gray-900 dark:text-white">Martínez, Ana Paula</p>
-                                    <p class="text-sm text-gray-600 dark:text-gray-400">Dr. Orlando Benjamín • 11:00</p>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <p class="font-semibold text-gray-900 dark:text-white">$6.500</p>
-                                <span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                                    Programada
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Consulta 4 -->
-                        <div class="group flex items-center justify-between p-4 rounded-lg border border-emerald-100 bg-white/80 transition-all duration-200 hover:border-emerald-200 hover:shadow-md dark:border-emerald-800/30 dark:bg-gray-800/50 dark:hover:border-emerald-700/50">
-                            <div class="flex items-center gap-4">
-                                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-100 transition-transform duration-200 group-hover:scale-110 dark:bg-emerald-900/30">
-                                    <CheckCircle class="h-5 w-5 text-emerald-600 dark:text-emerald-400" />
-                                </div>
-                                <div>
-                                    <p class="font-medium text-gray-900 dark:text-white">González, Roberto</p>
-                                    <p class="text-sm text-gray-600 dark:text-gray-400">Dra. García Luna Alejandra • 08:45</p>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <p class="font-semibold text-gray-900 dark:text-white">$12.000</p>
-                                <span class="inline-flex items-center rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400">
-                                    Completada
-                                </span>
-                            </div>
-                        </div>
-
-                        <!-- Consulta 5 -->
-                        <div class="group flex items-center justify-between p-4 rounded-lg border border-blue-100 bg-white/80 transition-all duration-200 hover:border-blue-200 hover:shadow-md dark:border-blue-800/30 dark:bg-gray-800/50 dark:hover:border-blue-700/50">
-                            <div class="flex items-center gap-4">
-                                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-blue-100 transition-transform duration-200 group-hover:scale-110 dark:bg-blue-900/30">
-                                    <Calendar class="h-5 w-5 text-blue-600 dark:text-blue-400" />
-                                </div>
-                                <div>
-                                    <p class="font-medium text-gray-900 dark:text-white">Silva, Carmen Rosa</p>
-                                    <p class="text-sm text-gray-600 dark:text-gray-400">Dr. Orlando Benjamín • 12:30</p>
-                                </div>
-                            </div>
-                            <div class="text-right">
-                                <p class="font-semibold text-gray-900 dark:text-white">$9.200</p>
-                                <span class="inline-flex items-center rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-800 dark:bg-blue-900/30 dark:text-blue-400">
-                                    Programada
-                                </span>
-                            </div>
+                        <!-- Mensaje cuando no hay consultas -->
+                        <div v-if="props.dashboardData.consultasDetalle.length === 0" class="text-center py-8 text-gray-500 dark:text-gray-400">
+                            <Calendar class="h-12 w-12 mx-auto mb-3 opacity-50" />
+                            <p>No hay consultas programadas para hoy</p>
                         </div>
                     </div>
                 </div>
@@ -259,7 +230,7 @@ const formatCurrency = (amount: number) => {
                             <DollarSign class="h-5 w-5 text-emerald-600" />
                             Resumen de Caja
                         </h2>
-                        <span class="text-sm text-gray-500 dark:text-gray-400 bg-emerald-100 px-2 py-1 rounded-md dark:bg-emerald-900/30">18/06/25</span>
+                        <span class="text-sm text-gray-500 dark:text-gray-400 bg-emerald-100 px-2 py-1 rounded-md dark:bg-emerald-900/30">{{ props.dashboardData.fecha }}</span>
                     </div>
 
                     <!-- Totales por profesional -->
@@ -270,13 +241,15 @@ const formatCurrency = (amount: number) => {
                         </h3>
                         
                         <div class="space-y-3">
-                            <div class="flex justify-between items-center p-3 rounded-lg bg-emerald-50/50 border border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800/30">
-                                <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">Dr. Orlando Benjamín</span>
-                                <span class="font-semibold text-emerald-700 dark:text-emerald-400">$22.700</span>
+                            <div v-for="profesional in props.dashboardData.resumenCaja.porProfesional" :key="profesional.nombre" 
+                                 class="flex justify-between items-center p-3 rounded-lg bg-emerald-50/50 border border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800/30">
+                                <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">{{ profesional.nombre }}</span>
+                                <span class="font-semibold text-emerald-700 dark:text-emerald-400">{{ formatCurrency(profesional.total) }}</span>
                             </div>
-                            <div class="flex justify-between items-center p-3 rounded-lg bg-emerald-50/50 border border-emerald-100 dark:bg-emerald-900/20 dark:border-emerald-800/30">
-                                <span class="text-sm text-gray-700 dark:text-gray-300 font-medium">Dra. García Luna</span>
-                                <span class="font-semibold text-emerald-700 dark:text-emerald-400">$20.500</span>
+                            
+                            <!-- Mensaje cuando no hay datos -->
+                            <div v-if="props.dashboardData.resumenCaja.porProfesional.length === 0" class="text-center py-4 text-gray-500 dark:text-gray-400">
+                                <p class="text-sm">No hay consultas facturadas hoy</p>
                             </div>
                         </div>
                     </div>
@@ -291,19 +264,19 @@ const formatCurrency = (amount: number) => {
                                     <div class="h-3 w-3 rounded-full bg-emerald-500"></div>
                                     <span class="text-sm text-gray-600 dark:text-gray-400">Efectivo (70%)</span>
                                 </div>
-                                <span class="font-semibold text-emerald-600 dark:text-emerald-400">$54.000</span>
+                                <span class="font-semibold text-emerald-600 dark:text-emerald-400">{{ formatCurrency(props.dashboardData.resumenCaja.formasPago.efectivo) }}</span>
                             </div>
                             <div class="flex justify-between items-center">
                                 <div class="flex items-center gap-2">
                                     <div class="h-3 w-3 rounded-full bg-blue-500"></div>
                                     <span class="text-sm text-gray-600 dark:text-gray-400">Transferencia (30%)</span>
                                 </div>
-                                <span class="font-semibold text-blue-600 dark:text-blue-400">$30.000</span>
+                                <span class="font-semibold text-blue-600 dark:text-blue-400">{{ formatCurrency(props.dashboardData.resumenCaja.formasPago.transferencia) }}</span>
                             </div>
                         </div>
 
                         <!-- Barra de progreso visual -->
-                        <div class="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700">
+                        <div class="w-full bg-gray-200 rounded-full h-2 dark:bg-gray-700" v-if="props.dashboardData.resumenCaja.totalGeneral > 0">
                             <div class="bg-gradient-to-r from-emerald-500 to-blue-500 h-2 rounded-full relative">
                                 <div class="bg-emerald-500 h-2 rounded-l-full w-[70%]"></div>
                             </div>
@@ -314,11 +287,13 @@ const formatCurrency = (amount: number) => {
                     <div class="border-t border-emerald-200 dark:border-emerald-700/50 pt-4">
                         <div class="flex justify-between items-center mb-2">
                             <span class="text-lg font-semibold text-gray-900 dark:text-white">Total del Día</span>
-                            <span class="text-2xl font-bold text-emerald-600 dark:text-emerald-400 animate-pulse">$84.000</span>
+                            <span class="text-2xl font-bold text-emerald-600 dark:text-emerald-400" :class="{ 'animate-pulse': props.dashboardData.resumenCaja.totalGeneral > 0 }">
+                                {{ formatCurrency(props.dashboardData.resumenCaja.totalGeneral) }}
+                            </span>
                         </div>
                         <div class="flex justify-between text-xs text-gray-500 dark:text-gray-400">
-                            <span>12 consultas completadas</span>
-                            <span>8 pacientes atendidos</span>
+                            <span>{{ props.dashboardData.consultasHoy.completadas }} consultas completadas</span>
+                            <span>{{ props.dashboardData.consultasDetalle.length }} turnos del día</span>
                         </div>
                     </div>
 
@@ -332,3 +307,15 @@ const formatCurrency = (amount: number) => {
     </AppLayout>
 </template>
 
+<!-- 
+MEJORAS APLICADAS - PASO 3:
+✅ Colores de marca Punto Salud (verde emerald #166B3A)
+✅ Gradientes sutiles y transiciones suaves
+✅ Animaciones hover y microinteracciones
+✅ Iconos temáticos (Activity, Heart, DollarSign)
+✅ Estados visuales mejorados con colores semánticos
+✅ Barra de progreso para formas de pago
+✅ Optimización para dark mode
+✅ Responsive design mejorado
+✅ Sombras y efectos de profundidad
+-->

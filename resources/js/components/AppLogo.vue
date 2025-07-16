@@ -7,6 +7,9 @@ import AppLogoIcon from '@/components/AppLogoIcon.vue';
         <AppLogoIcon class="size-5 fill-current text-white dark:text-black" />
     </div>
     <div class="ml-1 grid flex-1 text-left text-sm">
-        <span class="mb-0.5 truncate leading-tight font-semibold">Sistema Punto SALUD</span>
+        <span class="mb-0.5 truncate leading-tight font-semibold text-emerald-700 dark:text-emerald-400">
+            Punto 
+            <span class="text-emerald-800 dark:text-emerald-300 font-bold">SALUD</span>
+        </span>
     </div>
 </template>

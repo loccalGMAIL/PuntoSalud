@@ -2,22 +2,32 @@
 
 namespace Database\Seeders;
 
-use App\Models\Specialty;
 use Illuminate\Database\Seeder;
+use App\Models\Consultation;
+use App\Models\Appointment;
 
-class SpecialtySeeder extends Seeder
+class ConsultationsSeeder extends Seeder
 {
     public function run(): void
     {
-        $specialties = [
-            ['name' => 'Clínica Médica', 'description' => 'Medicina general'],
-            ['name' => 'Cardiología', 'description' => 'Especialidad del corazón'],
-            ['name' => 'Dermatología', 'description' => 'Especialidad de la piel'],
-            ['name' => 'Traumatología', 'description' => 'Especialidad de huesos y articulaciones'],
-        ];
+        // Obtener todos los turnos que fueron atendidos
+        $attendedAppointments = Appointment::where('status', 'attended')->get();
 
-        foreach ($specialties as $specialty) {
-            Specialty::create($specialty);
-        }
-    }
-}
+        foreach ($attendedAppointments as $appointment) {
+            // Calcular comisiones
+            $amountCharged = $appointment->amount;
+            $professionalCommissionRate = $appointment->professional->commission_percentage / 100;
+            $professionalCommission = $amountCharged * $professionalCommissionRate;
+            $clinicAmount = $amountCharged - $professionalCommission;
+
+            // Determinar estado de pago (80% pagado, 20% pendiente)
+            $paymentStatus = rand(1, 10) <= 8 ? 'paid' : 'pending';
+
+            Consultation::create([
+                'appointment_id' => $appointment->id,
+                'professional_id' => $appointment->professional_id,
+                'patient_id' => $appointment->patient_id,
+                'consultation_date' => $appointment->appointment_date,
+                'diagnosis' => $this->generateDiagnosis($appointment->professional->specialty->name),
+                'treatment' => $this->generateTreatment($appointment->professional->specialty->name),
+                'notes' => $this->generateConsultationNotes(),

@@ -7,6 +7,7 @@ use App\Http\Controllers\ProfessionalController;
 use App\Http\Controllers\SpecialtyController;
 use App\Http\Controllers\PatientController;
 use App\Http\Controllers\AppointmentController;
+use App\Http\Controllers\DashboardController;
 
 Route::get('/', function () {
     return Inertia::render('auth/Login');
@@ -14,9 +15,13 @@ Route::get('/', function () {
 
 
 Route::middleware(['auth', 'verified'])->group(function () {
-    Route::get('/dashboard', function () {
-        return Inertia::render('Dashboard');
-    })->name('dashboard');
+    // Route::get('/dashboard', function () {
+    //     return Inertia::render('Dashboard');
+    // })->name('dashboard');
+
+    // Dashboard con datos reales
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+
 
     // Rutas para profesionales
     Route::resource('professionals', ProfessionalController::class);
