@@ -149,6 +149,7 @@ const submitForm = () => {
     //     commission_percentage: parseFloat(form.commission_percentage.toString()),
     //     ...(isEditing.value && { is_active: form.is_active })
     // };
+    
 
     if (isEditing.value) {
         // Actualizar profesional existente
