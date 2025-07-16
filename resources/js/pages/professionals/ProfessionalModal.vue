@@ -139,16 +139,16 @@ const createSpecialty = () => {
 
 // Función para enviar el formulario
 const submitForm = () => {
-    const data = {
-        first_name: form.first_name,
-        last_name: form.last_name,
-        email: form.email,
-        phone: form.phone || null,
-        license_number: form.license_number,
-        specialty_id: parseInt(form.specialty_id),
-        commission_percentage: parseFloat(form.commission_percentage.toString()),
-        ...(isEditing.value && { is_active: form.is_active })
-    };
+    // const data = {
+    //     first_name: form.first_name,
+    //     last_name: form.last_name,
+    //     email: form.email,
+    //     phone: form.phone || null,
+    //     license_number: form.license_number,
+    //     specialty_id: parseInt(form.specialty_id),
+    //     commission_percentage: parseFloat(form.commission_percentage.toString()),
+    //     ...(isEditing.value && { is_active: form.is_active })
+    // };
 
     if (isEditing.value) {
         // Actualizar profesional existente

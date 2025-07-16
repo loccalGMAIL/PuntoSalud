@@ -111,19 +111,19 @@ const closeModal = () => {
 
 // Función para enviar el formulario
 const submitForm = () => {
-    const data = {
-        first_name: form.first_name,
-        last_name: form.last_name,
-        dni: form.dni,
-        birth_date: form.birth_date,
-        email: form.email || null,
-        phone: form.phone,
-        address: form.address || null,
-        health_insurance: form.health_insurance || null,
-        health_insurance_number: form.health_insurance_number || null,
-        medical_notes: form.medical_notes || null,
-        ...(isEditing.value && { is_active: form.is_active })
-    };
+    // const data = {
+    //     first_name: form.first_name,
+    //     last_name: form.last_name,
+    //     dni: form.dni,
+    //     birth_date: form.birth_date,
+    //     email: form.email || null,
+    //     phone: form.phone,
+    //     address: form.address || null,
+    //     health_insurance: form.health_insurance || null,
+    //     health_insurance_number: form.health_insurance_number || null,
+    //     medical_notes: form.medical_notes || null,
+    //     ...(isEditing.value && { is_active: form.is_active })
+    // };
 
     if (isEditing.value) {
         // Actualizar paciente existente

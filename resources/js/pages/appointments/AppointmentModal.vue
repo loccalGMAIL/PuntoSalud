@@ -168,25 +168,25 @@ watch(() => props.open, (newValue) => {
 });
 
 // Función para cerrar el modal
-const closeModal = () => {
-    resetForm();
-};
+// const closeModal = () => {
+//     resetForm();
+// };
 
 // Función para enviar el formulario
 const submitForm = () => {
     // Combinar fecha y hora
     const appointmentDateTime = `${form.appointment_date}T${form.appointment_time}:00`;
     
-    const data = {
-        professional_id: parseInt(form.professional_id),
-        patient_id: parseInt(form.patient_id),
-        appointment_date: appointmentDateTime,
-        duration: form.duration,
-        office_id: form.office_id ? parseInt(form.office_id) : null,
-        notes: form.notes || null,
-        amount: form.amount ? parseFloat(form.amount) : null,
-        ...(isEditing.value && { status: form.status })
-    };
+    // const data = {
+    //     professional_id: parseInt(form.professional_id),
+    //     patient_id: parseInt(form.patient_id),
+    //     appointment_date: appointmentDateTime,
+    //     duration: form.duration,
+    //     office_id: form.office_id ? parseInt(form.office_id) : null,
+    //     notes: form.notes || null,
+    //     amount: form.amount ? parseFloat(form.amount) : null,
+    //     ...(isEditing.value && { status: form.status })
+    // };
 
     if (isEditing.value) {
         // Actualizar turno existente
