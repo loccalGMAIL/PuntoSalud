@@ -13,13 +13,13 @@ use Carbon\Carbon;
 class AppointmentController extends Controller
 {
     /**
-     * Display a listing of the resource.
+     * Lista de turnos con filtros
      */
     public function index(Request $request)
     {
-        $query = Appointment::with(['professional.specialty', 'patient', 'office', 'createdBy']);
+        $query = Appointment::with(['professional.specialty', 'patient', 'office']);
 
-        // Filtro por fecha (por defecto hoy y próximos 7 días)
+        // Filtros de fecha (por defecto: hoy y próximos 7 días)
         $startDate = $request->get('start_date', today()->format('Y-m-d'));
         $endDate = $request->get('end_date', today()->addDays(7)->format('Y-m-d'));
         
@@ -38,78 +38,103 @@ class AppointmentController extends Controller
             $query->where('status', $request->status);
         }
 
-        $appointments = $query->orderBy('appointment_date')->get();
+        // Búsqueda por paciente
+        if ($request->filled('search')) {
+            $search = $request->search;
+            $query->whereHas('patient', function($q) use ($search) {
+                $q->where('first_name', 'like', "%{$search}%")
+                  ->orWhere('last_name', 'like', "%{$search}%")
+                  ->orWhere('dni', 'like', "%{$search}%");
+            });
+        }
 
-        // Cargar datos para filtros
-        $professionals = Professional::active()->with('specialty')->orderBy('last_name')->get();
-        $patients = Patient::active()->orderBy('last_name')->get();
-        $offices = Office::active()->orderBy('number')->get();
+        $appointments = $query->orderBy('appointment_date', 'asc')->get();
+
+        // Datos para filtros y formularios
+        $professionals = Professional::where('is_active', true)->with('specialty')->orderBy('last_name')->get();
+        $patients = Patient::where('is_active', true)->orderBy('last_name')->get();
+        $offices = Office::where('is_active', true)->orderBy('number')->get();
 
         return Inertia::render('appointments/index', [
             'appointments' => $appointments,
             'professionals' => $professionals,
             'patients' => $patients,
             'offices' => $offices,
-            'filters' => $request->only(['start_date', 'end_date', 'professional_id', 'status'])
+            'filters' => $request->only(['start_date', 'end_date', 'professional_id', 'status', 'search']),
+            'stats' => $this->getStats($appointments)
         ]);
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Crear nuevo turno
      */
     public function store(Request $request)
     {
         $validated = $request->validate([
             'professional_id' => 'required|exists:professionals,id',
             'patient_id' => 'required|exists:patients,id',
-            'appointment_date' => 'required|date|after:now',
-            'duration' => 'required|string|in:00:15:00,00:30:00,00:45:00,01:00:00,01:30:00,02:00:00',
+            'appointment_date' => 'required|date|after_or_equal:today',
+            'appointment_time' => 'required|string',
+            'duration' => 'required|integer|min:15|max:120',
             'office_id' => 'nullable|exists:offices,id',
             'notes' => 'nullable|string|max:500',
             'amount' => 'nullable|numeric|min:0',
         ]);
 
-        // Verificar disponibilidad del profesional
-        $appointmentStart = Carbon::parse($validated['appointment_date']);
-        $durationParts = explode(':', $validated['duration']);
-        $appointmentEnd = $appointmentStart->copy()
-            ->addHours((int)$durationParts[0])
-            ->addMinutes((int)$durationParts[1]);
+        // Crear fecha y hora completa
+        $appointmentDateTime = Carbon::parse($validated['appointment_date'] . ' ' . $validated['appointment_time']);
 
-        $conflict = Appointment::where('professional_id', $validated['professional_id'])
+        // Validación básica de disponibilidad
+        $existingAppointment = Appointment::where('professional_id', $validated['professional_id'])
+            ->where('appointment_date', $appointmentDateTime)
             ->where('status', 'scheduled')
-            ->where(function ($query) use ($appointmentStart, $appointmentEnd) {
-                $query->whereBetween('appointment_date', [$appointmentStart, $appointmentEnd])
-                    ->orWhere(function ($subQuery) use ($appointmentStart) {
-                        $subQuery->where('appointment_date', '<=', $appointmentStart)
-                            ->whereRaw('DATE_ADD(appointment_date, INTERVAL TIME_TO_SEC(duration) SECOND) > ?', [$appointmentStart]);
-                    });
-            })->exists();
+            ->first();
 
-        if ($conflict) {
-            return back()->withErrors(['appointment_date' => 'El profesional ya tiene un turno en ese horario.']);
+        if ($existingAppointment) {
+            return redirect()->back()->withErrors(['appointment_time' => 'El profesional ya tiene un turno en ese horario.']);
         }
 
-        $validated['created_by'] = auth()->id();
+        // Crear turno
+        Appointment::create([
+            'professional_id' => $validated['professional_id'],
+            'patient_id' => $validated['patient_id'],
+            'appointment_date' => $appointmentDateTime,
+            'duration' => $this->formatDuration($validated['duration']),
+            'office_id' => $validated['office_id'],
+            'notes' => $validated['notes'],
+            'amount' => $validated['amount'],
+            'status' => 'scheduled',
+            'created_by' => auth()->id(),
+        ]);
 
-        Appointment::create($validated);
-
-        return back()->with('success', 'Turno creado exitosamente.');
+        return redirect()->back()->with('success', 'Turno creado exitosamente.');
     }
 
     /**
-     * Update the specified resource in storage.
+     * Mostrar detalle del turno
+     */
+    public function show(Appointment $appointment)
+    {
+        $appointment->load(['professional.specialty', 'patient', 'office']);
+
+        return Inertia::render('appointments/show', [
+            'appointment' => $appointment
+        ]);
+    }
+
+    /**
+     * Actualizar turno existente
      */
     public function update(Request $request, Appointment $appointment)
     {
-        // Detectar si es solo cambio de estado
-        if ($request->has('status') && count($request->all()) === 1) {
+        // Si es solo cambio de estado
+        if ($request->has('status') && count($request->only(['status', '_token', '_method'])) <= 3) {
             $appointment->update([
                 'status' => $request->status,
                 'confirmed_at' => $request->status === 'attended' ? now() : null
             ]);
 
-            return back()->with('success', 'Estado del turno actualizado.');
+            return redirect()->back()->with('success', 'Estado del turno actualizado.');
         }
 
         // Actualización completa
@@ -117,101 +142,99 @@ class AppointmentController extends Controller
             'professional_id' => 'required|exists:professionals,id',
             'patient_id' => 'required|exists:patients,id',
             'appointment_date' => 'required|date',
-            'duration' => 'required|string|in:00:15:00,00:30:00,00:45:00,01:00:00,01:30:00,02:00:00',
+            'appointment_time' => 'required|string',
+            'duration' => 'required|integer|min:15|max:120',
             'office_id' => 'nullable|exists:offices,id',
             'notes' => 'nullable|string|max:500',
             'amount' => 'nullable|numeric|min:0',
             'status' => 'required|in:scheduled,attended,cancelled,absent',
         ]);
 
-        // Verificar disponibilidad solo si cambió la fecha/hora o profesional
-        if ($appointment->appointment_date != $validated['appointment_date'] || 
-            $appointment->professional_id != $validated['professional_id']) {
-            
-            $appointmentStart = Carbon::parse($validated['appointment_date']);
-            $durationParts = explode(':', $validated['duration']);
-            $appointmentEnd = $appointmentStart->copy()
-                ->addHours((int)$durationParts[0])
-                ->addMinutes((int)$durationParts[1]);
+        $appointmentDateTime = Carbon::parse($validated['appointment_date'] . ' ' . $validated['appointment_time']);
 
-            $conflict = Appointment::where('professional_id', $validated['professional_id'])
-                ->where('id', '!=', $appointment->id)
+        // Validación básica de disponibilidad (si cambió la fecha/hora)
+        if ($appointment->appointment_date->format('Y-m-d H:i') !== $appointmentDateTime->format('Y-m-d H:i')) {
+            $existingAppointment = Appointment::where('professional_id', $validated['professional_id'])
+                ->where('appointment_date', $appointmentDateTime)
                 ->where('status', 'scheduled')
-                ->where(function ($query) use ($appointmentStart, $appointmentEnd) {
-                    $query->whereBetween('appointment_date', [$appointmentStart, $appointmentEnd])
-                        ->orWhere(function ($subQuery) use ($appointmentStart) {
-                            $subQuery->where('appointment_date', '<=', $appointmentStart)
-                                ->whereRaw('DATE_ADD(appointment_date, INTERVAL TIME_TO_SEC(duration) SECOND) > ?', [$appointmentStart]);
-                        });
-                })->exists();
+                ->where('id', '!=', $appointment->id)
+                ->first();
 
-            if ($conflict) {
-                return back()->withErrors(['appointment_date' => 'El profesional ya tiene un turno en ese horario.']);
+            if ($existingAppointment) {
+                return redirect()->back()->withErrors(['appointment_time' => 'El profesional ya tiene un turno en ese horario.']);
             }
         }
 
-        $appointment->update($validated);
+        $appointment->update([
+            'professional_id' => $validated['professional_id'],
+            'patient_id' => $validated['patient_id'],
+            'appointment_date' => $appointmentDateTime,
+            'duration' => $this->formatDuration($validated['duration']),
+            'office_id' => $validated['office_id'],
+            'notes' => $validated['notes'],
+            'amount' => $validated['amount'],
+            'status' => $validated['status'],
+            'confirmed_at' => $validated['status'] === 'attended' ? now() : $appointment->confirmed_at,
+        ]);
 
-        return back()->with('success', 'Turno actualizado exitosamente.');
+        return redirect()->back()->with('success', 'Turno actualizado exitosamente.');
     }
 
     /**
-     * Remove the specified resource from storage.
+     * Cancelar turno
      */
     public function destroy(Appointment $appointment)
     {
-        // Solo permitir cancelar turnos programados
         if ($appointment->status !== 'scheduled') {
-            return back()->withErrors(['error' => 'Solo se pueden cancelar turnos programados.']);
+            return redirect()->back()->withErrors(['error' => 'Solo se pueden cancelar turnos programados.']);
         }
 
-        $appointment->update(['status' => 'cancelled']);
+        $appointment->update([
+            'status' => 'cancelled',
+            'confirmed_at' => null
+        ]);
 
-        return back()->with('success', 'Turno cancelado exitosamente.');
+        return redirect()->back()->with('success', 'Turno cancelado exitosamente.');
     }
 
     /**
-     * Get available time slots for a professional on a specific date
+     * Obtener horarios disponibles para un profesional
      */
     public function availableSlots(Request $request)
     {
-        $request->validate([
+        $validated = $request->validate([
             'professional_id' => 'required|exists:professionals,id',
             'date' => 'required|date',
-            'duration' => 'required|string'
+            'duration' => 'required|integer|min:15|max:120'
         ]);
 
-        $professional = Professional::findOrFail($request->professional_id);
-        $date = Carbon::parse($request->date);
+        $slots = [];
+        $date = Carbon::parse($validated['date']);
         
-        // Horarios de trabajo básicos (esto después se puede mejorar con el schedule del profesional)
-        $workStart = $date->copy()->setTime(8, 0); // 8:00 AM
-        $workEnd = $date->copy()->setTime(18, 0);  // 6:00 PM
-        
-        $durationParts = explode(':', $request->duration);
-        $durationMinutes = ((int)$durationParts[0] * 60) + (int)$durationParts[1];
-        
+        // No generar slots para fechas pasadas o fines de semana
+        if ($date->isPast() || $date->isWeekend()) {
+            return response()->json($slots);
+        }
+
         // Obtener turnos existentes del día
-        $existingAppointments = Appointment::where('professional_id', $request->professional_id)
+        $existingAppointments = Appointment::where('professional_id', $validated['professional_id'])
             ->whereDate('appointment_date', $date)
             ->where('status', 'scheduled')
-            ->orderBy('appointment_date')
             ->get();
-        
-        $availableSlots = [];
-        $currentTime = $workStart->copy();
-        
-        while ($currentTime->copy()->addMinutes($durationMinutes)->lte($workEnd)) {
-            $slotEnd = $currentTime->copy()->addMinutes($durationMinutes);
+
+        // Generar slots de 8:00 a 18:00 cada 30 minutos
+        $currentTime = $date->copy()->setTime(8, 0);
+        $endTime = $date->copy()->setTime(18, 0);
+        $duration = $validated['duration'];
+
+        while ($currentTime->copy()->addMinutes($duration)->lte($endTime)) {
+            $slotEnd = $currentTime->copy()->addMinutes($duration);
             
             // Verificar si el slot está libre
             $isAvailable = true;
             foreach ($existingAppointments as $appointment) {
                 $appointmentStart = Carbon::parse($appointment->appointment_date);
-                $appointmentDuration = explode(':', $appointment->duration);
-                $appointmentEnd = $appointmentStart->copy()
-                    ->addHours((int)$appointmentDuration[0])
-                    ->addMinutes((int)$appointmentDuration[1]);
+                $appointmentEnd = $appointmentStart->copy()->addMinutes($this->durationToMinutes($appointment->duration));
                 
                 if ($currentTime->lt($appointmentEnd) && $slotEnd->gt($appointmentStart)) {
                     $isAvailable = false;
@@ -220,12 +243,49 @@ class AppointmentController extends Controller
             }
             
             if ($isAvailable) {
-                $availableSlots[] = $currentTime->format('H:i');
+                $slots[] = $currentTime->format('H:i');
             }
             
-            $currentTime->addMinutes(30); // Slots cada 30 minutos
+            $currentTime->addMinutes(30);
         }
-        
-        return response()->json($availableSlots);
+
+        return response()->json($slots);
+    }
+
+    /**
+     * Obtener estadísticas
+     */
+    private function getStats($appointments)
+    {
+        return [
+            'total' => $appointments->count(),
+            'scheduled' => $appointments->where('status', 'scheduled')->count(),
+            'attended' => $appointments->where('status', 'attended')->count(),
+            'cancelled' => $appointments->where('status', 'cancelled')->count(),
+            'absent' => $appointments->where('status', 'absent')->count(),
+        ];
+    }
+
+    /**
+     * Convertir duración a minutos
+     */
+    private function durationToMinutes($duration)
+    {
+        if (is_numeric($duration)) {
+            return (int) $duration;
+        }
+
+        $parts = explode(':', $duration);
+        return ((int) $parts[0] * 60) + ((int) $parts[1]);
+    }
+
+    /**
+     * Formatear duración para la base de datos
+     */
+    private function formatDuration($minutes)
+    {
+        $hours = floor($minutes / 60);
+        $mins = $minutes % 60;
+        return sprintf('%02d:%02d:00', $hours, $mins);
     }
 }

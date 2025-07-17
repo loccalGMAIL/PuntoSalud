@@ -34,7 +34,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
 
     // Rutas para citas
     Route::resource('appointments', AppointmentController::class);
+    // Agregar esta ruta en routes/web.php, dentro del grupo de middleware auth
+
+    // Ruta para obtener horarios disponibles
+    Route::get('/appointments/available-slots', [AppointmentController::class, 'availableSlots'])->name('appointments.available-slots');
 });
 
-require __DIR__.'/settings.php';
-require __DIR__.'/auth.php';
+require __DIR__ . '/settings.php';
+require __DIR__ . '/auth.php';
