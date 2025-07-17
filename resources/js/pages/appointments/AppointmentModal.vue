@@ -17,8 +17,10 @@ import {
     DialogHeader,
     DialogTitle,
 } from '@/components/ui/dialog';
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { router, useForm } from '@inertiajs/vue3';
-import { LoaderCircle, Calendar, Clock, User, Building } from 'lucide-vue-next';
+import { LoaderCircle, Calendar, Clock, User, Building, DollarSign, Info } from 'lucide-vue-next';
 import { computed, watch, ref } from 'vue';
 
 interface Professional {
@@ -26,8 +28,10 @@ interface Professional {
     first_name: string;
     last_name: string;
     specialty: {
+        id: number;
         name: string;
     };
+    is_active: boolean;
 }
 
 interface Patient {
@@ -36,12 +40,15 @@ interface Patient {
     last_name: string;
     dni: string;
     phone: string;
+    email?: string;
+    is_active: boolean;
 }
 
 interface Office {
     id: number;
     number: string;
     name: string;
+    is_active: boolean;
 }
 
 interface Appointment {
@@ -75,34 +82,23 @@ const props = withDefaults(defineProps<Props>(), {
 
 const emit = defineEmits<Emits>();
 
+// Estado
+const loadingSlots = ref(false);
+const availableSlots = ref<string[]>([]);
+const selectedSlot = ref<string>('');
+
 // Determinar si es edición o creación
 const isEditing = computed(() => !!props.appointment);
 const title = computed(() => isEditing.value ? 'Editar Turno' : 'Nuevo Turno');
-const description = computed(() => 
-    isEditing.value 
-        ? 'Modifica los datos del turno' 
-        : 'Programa un nuevo turno para el paciente'
-);
 
-// Búsqueda de pacientes
-const patientSearch = ref('');
-const filteredPatients = computed(() => {
-    if (!patientSearch.value) return props.patients.slice(0, 10); // Mostrar solo los primeros 10
-    
-    return props.patients.filter(patient => 
-        `${patient.first_name} ${patient.last_name}`.toLowerCase().includes(patientSearch.value.toLowerCase()) ||
-        patient.dni.includes(patientSearch.value)
-    ).slice(0, 10);
-});
-
-// Opciones de duración
+// Opciones de duración (en minutos)
 const durationOptions = [
-    { value: '00:15:00', label: '15 minutos' },
-    { value: '00:30:00', label: '30 minutos' },
-    { value: '00:45:00', label: '45 minutos' },
-    { value: '01:00:00', label: '1 hora' },
-    { value: '01:30:00', label: '1 hora 30 min' },
-    { value: '02:00:00', label: '2 horas' }
+    { value: '15', label: '15 minutos' },
+    { value: '30', label: '30 minutos' },
+    { value: '45', label: '45 minutos' },
+    { value: '60', label: '1 hora' },
+    { value: '90', label: '1 hora 30 min' },
+    { value: '120', label: '2 horas' }
 ];
 
 // Opciones de estado (solo para edición)
@@ -113,27 +109,39 @@ const statusOptions = [
     { value: 'absent', label: 'Ausente' }
 ];
 
-// Formulario con Inertia
+// Formulario con Inertia - CORREGIDO: cambié valores iniciales
 const form = useForm({
-    professional_id: '',
-    patient_id: '',
+    professional_id: null,
+    patient_id: null,
     appointment_date: '',
     appointment_time: '',
-    duration: '00:30:00',
-    office_id: '',
+    duration: '30',
+    office_id: '0',  // Mantener como '0' que es válido
     notes: '',
-    amount: '',
+    amount: null,    // CORREGIDO: null en lugar de ''
     status: 'scheduled',
 });
 
-// Función para resetear el formulario
+// Función para resetear el formulario - CORREGIDO
 const resetForm = () => {
     form.reset();
     form.clearErrors();
-    patientSearch.value = '';
+    availableSlots.value = [];
+    selectedSlot.value = '';
+    
+    // CORREGIDO: Restablecer valores por defecto sin cadenas vacías
+    form.professional_id = null;
+    form.patient_id = null;
+    form.appointment_date = '';
+    form.appointment_time = '';
+    form.duration = '30';
+    form.office_id = '0';
+    form.notes = '';
+    form.amount = null;  // CORREGIDO: null en lugar de ''
+    form.status = 'scheduled';
 };
 
-// Función para cargar datos del turno en edición
+// Función para cargar datos del turno en edición - CORREGIDO
 const loadAppointmentData = () => {
     if (props.appointment) {
         const appointmentDate = new Date(props.appointment.appointment_date);
@@ -142,10 +150,10 @@ const loadAppointmentData = () => {
         form.patient_id = props.appointment.patient_id.toString();
         form.appointment_date = appointmentDate.toISOString().split('T')[0];
         form.appointment_time = appointmentDate.toTimeString().slice(0, 5);
-        form.duration = props.appointment.duration;
-        form.office_id = props.appointment.office_id?.toString() || '';
+        form.duration = durationStringToMinutes(props.appointment.duration).toString();
+        form.office_id = props.appointment.office_id?.toString() || '0'; // CORREGIDO: usar '0' en lugar de ''
         form.notes = props.appointment.notes || '';
-        form.amount = props.appointment.amount?.toString() || '';
+        form.amount = props.appointment.amount || null; // CORREGIDO: null en lugar de ''
         form.status = props.appointment.status;
     }
 };
@@ -162,31 +170,87 @@ watch(() => props.open, (newValue) => {
             form.appointment_date = today.toISOString().split('T')[0];
         }
     } else {
-        // Resetear cuando se cierra el modal
         resetForm();
     }
 });
 
-// Función para cerrar el modal
-// const closeModal = () => {
-//     resetForm();
-// };
+// Cargar slots disponibles cuando cambian los datos relevantes - DESHABILITADO TEMPORALMENTE
+// watch([() => form.professional_id, () => form.appointment_date, () => form.duration], 
+//     ([professionalId, date, duration]) => {
+//         if (professionalId && date && duration && props.open && !loadingSlots.value) {
+//             loadAvailableSlots();
+//         }
+//     }, { 
+//         immediate: false,
+//         deep: false 
+//     }
+// );
+
+// Función para cargar slots disponibles
+const loadAvailableSlots = async () => {
+    if (!form.professional_id || !form.appointment_date || !form.duration || loadingSlots.value) {
+        availableSlots.value = [];
+        return;
+    }
+
+    loadingSlots.value = true;
+    
+    try {
+        const response = await fetch(`/appointments/available-slots?professional_id=${form.professional_id}&date=${form.appointment_date}&duration=${form.duration}`);
+        
+        if (!response.ok) {
+            throw new Error('Error al cargar horarios');
+        }
+        
+        const slots = await response.json();
+        availableSlots.value = Array.isArray(slots) ? slots : [];
+        
+        // Si estamos editando y el horario actual está disponible, preseleccionarlo
+        if (isEditing.value && form.appointment_time) {
+            const currentTime = form.appointment_time;
+            if (slots.includes(currentTime)) {
+                selectedSlot.value = currentTime;
+            }
+        }
+    } catch (error) {
+        console.error('Error loading available slots:', error);
+        availableSlots.value = [];
+    } finally {
+        loadingSlots.value = false;
+    }
+};
 
 // Función para enviar el formulario
 const submitForm = () => {
-    // Combinar fecha y hora
-    const appointmentDateTime = `${form.appointment_date}T${form.appointment_time}:00`;
+    // Validaciones básicas
+    if (!form.professional_id || !form.patient_id || !form.appointment_date || !form.duration) {
+        alert('Por favor complete todos los campos obligatorios');
+        return;
+    }
+
+    // Usar el slot seleccionado o el tiempo manual
+    const appointmentTime = selectedSlot.value || form.appointment_time;
     
-    // const data = {
-    //     professional_id: parseInt(form.professional_id),
-    //     patient_id: parseInt(form.patient_id),
-    //     appointment_date: appointmentDateTime,
-    //     duration: form.duration,
-    //     office_id: form.office_id ? parseInt(form.office_id) : null,
-    //     notes: form.notes || null,
-    //     amount: form.amount ? parseFloat(form.amount) : null,
-    //     ...(isEditing.value && { status: form.status })
-    // };
+    if (!appointmentTime) {
+        alert('Debe seleccionar un horario');
+        return;
+    }
+
+    // Actualizar el form directamente
+    form.appointment_time = appointmentTime;
+    form.duration = parseInt(form.duration);
+    
+    if (form.office_id && form.office_id !== '0') {
+        form.office_id = parseInt(form.office_id);
+    } else {
+        form.office_id = null;
+    }
+    
+    if (form.amount) {
+        form.amount = parseFloat(form.amount);
+    } else {
+        form.amount = null;
+    }
 
     if (isEditing.value) {
         // Actualizar turno existente
@@ -194,6 +258,9 @@ const submitForm = () => {
             onSuccess: () => {
                 emit('success');
                 emit('update:open', false);
+            },
+            onError: (errors) => {
+                console.log('Error al actualizar:', errors);
             },
             preserveScroll: true,
         });
@@ -204,313 +271,288 @@ const submitForm = () => {
                 emit('success');
                 emit('update:open', false);
             },
+            onError: (errors) => {
+                console.log('Error al crear:', errors);
+            },
             preserveScroll: true,
         });
     }
 };
 
-// Profesional seleccionado para mostrar especialidad
+// Utilidades
+const durationStringToMinutes = (duration: string): number => {
+    const parts = duration.split(':');
+    return parseInt(parts[0]) * 60 + parseInt(parts[1]);
+};
+
+// Profesional seleccionado
 const selectedProfessional = computed(() => {
     if (!form.professional_id) return null;
     return props.professionals.find(p => p.id.toString() === form.professional_id);
 });
 
-// Paciente seleccionado para mostrar datos
+// Paciente seleccionado
 const selectedPatient = computed(() => {
     if (!form.patient_id) return null;
     return props.patients.find(p => p.id.toString() === form.patient_id);
 });
 
-// Fecha mínima (hoy)
+// Fecha mínima (hoy para nuevos turnos)
 const minDate = computed(() => {
+    if (isEditing.value) return undefined;
     return new Date().toISOString().split('T')[0];
 });
 
-// Validación de horario (horario laboral básico)
-const isValidTime = computed(() => {
-    if (!form.appointment_time) return true;
-    
-    const time = form.appointment_time;
-    const [hours, minutes] = time.split(':').map(Number);
-    const totalMinutes = hours * 60 + minutes;
-    
-    // Horario de 8:00 a 18:00
-    return totalMinutes >= 8 * 60 && totalMinutes <= 18 * 60;
-});
+// Seleccionar slot
+const selectSlot = (slot: string) => {
+    selectedSlot.value = slot;
+    form.appointment_time = slot;
+};
 </script>
 
 <template>
     <Dialog :open="open" @update:open="(value) => emit('update:open', value)">
-        <DialogContent class="sm:max-w-3xl max-h-[85vh] overflow-y-auto">
+        <DialogContent class="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
                 <DialogTitle class="flex items-center gap-2">
                     <Calendar class="h-5 w-5" />
                     {{ title }}
                 </DialogTitle>
                 <DialogDescription>
-                    {{ description }}
+                    {{ isEditing ? 'Modifica los datos del turno' : 'Programa un nuevo turno para el paciente' }}
                 </DialogDescription>
             </DialogHeader>
 
-            <form @submit.prevent="submitForm" class="space-y-6">
-                <!-- Información del Turno -->
-                <div>
-                    <h3 class="text-sm font-medium mb-3 flex items-center gap-2">
-                        <Calendar class="h-4 w-4" />
-                        Información del Turno
-                    </h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="space-y-2">
-                            <Label for="appointment_date">Fecha *</Label>
-                            <Input
-                                id="appointment_date"
-                                v-model="form.appointment_date"
-                                type="date"
-                                :min="isEditing ? undefined : minDate"
-                                :class="{ 'border-red-500': form.errors.appointment_date }"
-                                required
-                            />
-                            <p v-if="form.errors.appointment_date" class="text-sm text-red-600">
-                                {{ form.errors.appointment_date }}
-                            </p>
-                        </div>
-
-                        <div class="space-y-2">
-                            <Label for="appointment_time">Hora *</Label>
-                            <Input
-                                id="appointment_time"
-                                v-model="form.appointment_time"
-                                type="time"
-                                step="900"
-                                :class="{ 
-                                    'border-red-500': form.errors.appointment_time || !isValidTime,
-                                    'border-yellow-500': form.appointment_time && !isValidTime
-                                }"
-                                required
-                            />
-                            <p v-if="!isValidTime && form.appointment_time" class="text-sm text-yellow-600">
-                                Horario fuera del horario laboral (8:00 - 18:00)
-                            </p>
-                            <p v-if="form.errors.appointment_time" class="text-sm text-red-600">
-                                {{ form.errors.appointment_time }}
-                            </p>
-                        </div>
-
-                        <div class="space-y-2">
-                            <Label for="duration">Duración *</Label>
-                            <Select v-model="form.duration" required>
-                                <SelectTrigger :class="{ 'border-red-500': form.errors.duration }">
-                                    <SelectValue placeholder="Selecciona duración" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem 
-                                        v-for="option in durationOptions" 
-                                        :key="option.value" 
-                                        :value="option.value"
-                                    >
-                                        {{ option.label }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <p v-if="form.errors.duration" class="text-sm text-red-600">
-                                {{ form.errors.duration }}
-                            </p>
-                        </div>
-                    </div>
-                </div>
-
+            <form @submit.prevent="submitForm" class="space-y-4">
                 <!-- Profesional -->
-                <div>
-                    <h3 class="text-sm font-medium mb-3 flex items-center gap-2">
-                        <User class="h-4 w-4" />
-                        Profesional
-                    </h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="space-y-2">
-                            <Label for="professional">Profesional *</Label>
-                            <Select v-model="form.professional_id" required>
-                                <SelectTrigger :class="{ 'border-red-500': form.errors.professional_id }">
-                                    <SelectValue placeholder="Selecciona profesional" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem 
-                                        v-for="professional in professionals" 
-                                        :key="professional.id" 
-                                        :value="professional.id.toString()"
-                                    >
-                                        Dr. {{ professional.first_name }} {{ professional.last_name }} - {{ professional.specialty.name }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <p v-if="form.errors.professional_id" class="text-sm text-red-600">
-                                {{ form.errors.professional_id }}
-                            </p>
-                        </div>
-
-                        <div v-if="selectedProfessional" class="space-y-2">
-                            <Label>Especialidad</Label>
-                            <div class="p-2 bg-muted/50 rounded-md">
-                                <span class="text-sm font-medium">{{ selectedProfessional.specialty.name }}</span>
-                            </div>
-                        </div>
+                <div class="space-y-2">
+                    <Label for="professional_id">Profesional *</Label>
+                    <Select v-model="form.professional_id" required>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar profesional..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem 
+                                v-for="professional in professionals" 
+                                :key="professional.id"
+                                :value="professional.id.toString()"
+                            >
+                                Dr. {{ professional.first_name }} {{ professional.last_name }} - {{ professional.specialty.name }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <div v-if="form.errors.professional_id" class="text-sm text-red-600">
+                        {{ form.errors.professional_id }}
                     </div>
                 </div>
 
                 <!-- Paciente -->
-                <div>
-                    <h3 class="text-sm font-medium mb-3 flex items-center gap-2">
-                        <User class="h-4 w-4" />
-                        Paciente
-                    </h3>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div class="space-y-2">
-                            <Label for="patient">Paciente *</Label>
-                            <div class="space-y-2">
-                                <Input
-                                    v-model="patientSearch"
-                                    placeholder="Buscar paciente por nombre o DNI..."
-                                    class="mb-2"
-                                />
-                                <Select v-model="form.patient_id" required>
-                                    <SelectTrigger :class="{ 'border-red-500': form.errors.patient_id }">
-                                        <SelectValue placeholder="Selecciona paciente" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem 
-                                            v-for="patient in filteredPatients" 
-                                            :key="patient.id" 
-                                            :value="patient.id.toString()"
-                                        >
-                                            {{ patient.first_name }} {{ patient.last_name }} - {{ patient.dni }}
-                                        </SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <p v-if="form.errors.patient_id" class="text-sm text-red-600">
-                                {{ form.errors.patient_id }}
-                            </p>
-                        </div>
+                <div class="space-y-2">
+                    <Label for="patient_id">Paciente *</Label>
+                    <Select v-model="form.patient_id" required>
+                        <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar paciente..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem 
+                                v-for="patient in patients" 
+                                :key="patient.id"
+                                :value="patient.id.toString()"
+                            >
+                                {{ patient.last_name }}, {{ patient.first_name }} - {{ patient.dni }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <div v-if="form.errors.patient_id" class="text-sm text-red-600">
+                        {{ form.errors.patient_id }}
+                    </div>
+                </div>
 
-                        <div v-if="selectedPatient" class="space-y-2">
-                            <Label>Datos del Paciente</Label>
-                            <div class="p-3 bg-muted/50 rounded-md space-y-1">
-                                <div class="text-sm">
-                                    <span class="font-medium">{{ selectedPatient.first_name }} {{ selectedPatient.last_name }}</span>
-                                </div>
-                                <div class="text-xs text-muted-foreground">
-                                    DNI: {{ selectedPatient.dni }}
-                                </div>
-                                <div class="text-xs text-muted-foreground">
-                                    Tel: {{ selectedPatient.phone }}
-                                </div>
-                            </div>
+                <!-- Fecha y Duración -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <Label for="appointment_date">Fecha *</Label>
+                        <Input
+                            id="appointment_date"
+                            v-model="form.appointment_date"
+                            type="date"
+                            :min="minDate"
+                            required
+                        />
+                        <div v-if="form.errors.appointment_date" class="text-sm text-red-600">
+                            {{ form.errors.appointment_date }}
+                        </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="duration">Duración *</Label>
+                        <Select v-model="form.duration" required>
+                            <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar duración..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem 
+                                    v-for="option in durationOptions" 
+                                    :key="option.value"
+                                    :value="option.value"
+                                >
+                                    {{ option.label }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <div v-if="form.errors.duration" class="text-sm text-red-600">
+                            {{ form.errors.duration }}
                         </div>
                     </div>
                 </div>
 
-                <!-- Detalles Adicionales -->
-                <div>
-                    <h3 class="text-sm font-medium mb-3 flex items-center gap-2">
-                        <Building class="h-4 w-4" />
-                        Detalles Adicionales
-                    </h3>
-                    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div class="space-y-2">
-                            <Label for="office">Consultorio</Label>
-                            <Select v-model="form.office_id">
-                                <SelectTrigger :class="{ 'border-red-500': form.errors.office_id }">
-                                    <SelectValue placeholder="Sin asignar" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="">Sin asignar</SelectItem>
-                                    <SelectItem 
-                                        v-for="office in offices" 
-                                        :key="office.id" 
-                                        :value="office.id.toString()"
-                                    >
-                                        {{ office.number }} - {{ office.name }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                            <p v-if="form.errors.office_id" class="text-sm text-red-600">
-                                {{ form.errors.office_id }}
-                            </p>
-                        </div>
+                <!-- Horarios disponibles -->
+                <div v-if="form.professional_id && form.appointment_date && form.duration" class="space-y-2">
+                    <Label>Horarios Disponibles</Label>
+                    <div v-if="loadingSlots" class="flex items-center gap-2 text-sm text-muted-foreground">
+                        <LoaderCircle class="h-4 w-4 animate-spin" />
+                        Cargando horarios...
+                    </div>
+                    <div v-else-if="availableSlots.length > 0" class="grid grid-cols-6 gap-2">
+                        <Button
+                            v-for="slot in availableSlots"
+                            :key="slot"
+                            type="button"
+                            variant="outline"
+                            :class="selectedSlot === slot ? 'bg-emerald-100 border-emerald-500' : ''"
+                            @click="selectSlot(slot)"
+                            class="h-8 text-xs"
+                        >
+                            {{ slot }}
+                        </Button>
+                    </div>
+                    <div v-else class="text-sm text-muted-foreground">
+                        No hay horarios disponibles para esta fecha y duración.
+                    </div>
+                </div>
 
-                        <div class="space-y-2">
-                            <Label for="amount">Importe ($)</Label>
-                            <Input
-                                id="amount"
-                                v-model="form.amount"
-                                type="number"
-                                min="0"
-                                step="0.01"
-                                placeholder="0.00"
-                                :class="{ 'border-red-500': form.errors.amount }"
-                            />
-                            <p v-if="form.errors.amount" class="text-sm text-red-600">
-                                {{ form.errors.amount }}
-                            </p>
-                        </div>
+                <!-- Horario manual -->
+                <div class="space-y-2">
+                    <Label for="appointment_time">Horario (manual)</Label>
+                    <Input
+                        id="appointment_time"
+                        v-model="form.appointment_time"
+                        type="time"
+                        min="08:00"
+                        max="18:00"
+                        step="900"
+                    />
+                    <div v-if="form.errors.appointment_time" class="text-sm text-red-600">
+                        {{ form.errors.appointment_time }}
+                    </div>
+                </div>
 
-                        <!-- Estado (solo en edición) -->
-                        <div v-if="isEditing" class="space-y-2">
-                            <Label for="status">Estado</Label>
-                            <Select v-model="form.status">
-                                <SelectTrigger>
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem 
-                                        v-for="status in statusOptions" 
-                                        :key="status.value" 
-                                        :value="status.value"
-                                    >
-                                        {{ status.label }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
+                <!-- Consultorio y Monto -->
+                <div class="grid grid-cols-2 gap-4">
+                    <div class="space-y-2">
+                        <Label for="office_id">Consultorio</Label>
+                        <Select v-model="form.office_id">
+                            <SelectTrigger>
+                                <SelectValue placeholder="Seleccionar consultorio..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <!-- CORREGIDO: Cambié value="" por value="0" -->
+                                <SelectItem value="0">Sin consultorio</SelectItem>
+                                <SelectItem 
+                                    v-for="office in offices" 
+                                    :key="office.id"
+                                    :value="office.id.toString()"
+                                >
+                                    {{ office.number }} - {{ office.name }}
+                                </SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <div v-if="form.errors.office_id" class="text-sm text-red-600">
+                            {{ form.errors.office_id }}
                         </div>
+                    </div>
+
+                    <div class="space-y-2">
+                        <Label for="amount">Monto</Label>
+                        <Input
+                            id="amount"
+                            v-model="form.amount"
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            placeholder="0.00"
+                        />
+                        <div v-if="form.errors.amount" class="text-sm text-red-600">
+                            {{ form.errors.amount }}
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Estado (solo para edición) -->
+                <div v-if="isEditing" class="space-y-2">
+                    <Label for="status">Estado</Label>
+                    <Select v-model="form.status">
+                        <SelectTrigger>
+                            <SelectValue placeholder="Seleccionar estado..." />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem 
+                                v-for="option in statusOptions" 
+                                :key="option.value"
+                                :value="option.value"
+                            >
+                                {{ option.label }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <div v-if="form.errors.status" class="text-sm text-red-600">
+                        {{ form.errors.status }}
                     </div>
                 </div>
 
                 <!-- Notas -->
-                <div>
-                    <div class="space-y-2">
-                        <Label for="notes">Notas del Turno</Label>
-                        <textarea
-                            id="notes"
-                            v-model="form.notes"
-                            rows="2"
-                            placeholder="Observaciones, motivo de la consulta, preparación especial..."
-                            :class="[
-                                'flex min-h-[60px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50',
-                                { 'border-red-500': form.errors.notes }
-                            ]"
-                        ></textarea>
-                        <p v-if="form.errors.notes" class="text-sm text-red-600">
-                            {{ form.errors.notes }}
-                        </p>
+                <div class="space-y-2">
+                    <Label for="notes">Notas</Label>
+                    <Input
+                        id="notes"
+                        v-model="form.notes"
+                        placeholder="Notas adicionales sobre el turno..."
+                    />
+                    <div v-if="form.errors.notes" class="text-sm text-red-600">
+                        {{ form.errors.notes }}
                     </div>
+                </div>
+
+                <!-- Información -->
+                <div class="bg-blue-50 p-3 rounded-lg">
+                    <div class="flex items-center gap-2 text-sm text-blue-800">
+                        <Info class="h-4 w-4" />
+                        <span><strong>Horario laboral:</strong> De 8:00 a 18:00, lunes a viernes.</span>
+                    </div>
+                </div>
+
+                <!-- Errores generales -->
+                <div v-if="form.errors.error" class="text-sm text-red-600 bg-red-50 p-3 rounded">
+                    {{ form.errors.error }}
                 </div>
             </form>
 
-            <DialogFooter class="flex gap-3 pt-6 border-t">
-                <Button
-                    type="button"
-                    variant="outline"
+            <DialogFooter>
+                <Button 
+                    type="button" 
+                    variant="outline" 
                     @click="emit('update:open', false)"
                     :disabled="form.processing"
                 >
                     Cancelar
                 </Button>
-                <Button
+                <Button 
                     @click="submitForm"
-                    :disabled="form.processing || !isValidTime"
-                    class="min-w-[120px]"
+                    :disabled="form.processing"
+                    class="bg-emerald-600 hover:bg-emerald-700"
                 >
                     <LoaderCircle v-if="form.processing" class="mr-2 h-4 w-4 animate-spin" />
-                    {{ isEditing ? 'Actualizar Turno' : 'Crear Turno' }}
+                    {{ isEditing ? 'Actualizar' : 'Crear' }} Turno
                 </Button>
             </DialogFooter>
         </DialogContent>
