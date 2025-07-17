@@ -1,6 +1,320 @@
+<template>
+    <Head title="Pacientes" />
+
+    <AppLayout :breadcrumbs="breadcrumbs">
+        <div class="flex h-full flex-1 flex-col gap-4 p-3">
+            
+            <!-- Header con estadísticas -->
+            <div class="flex flex-col gap-3">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h1 class="text-xl font-bold tracking-tight text-gray-900 dark:text-white">
+                            Pacientes
+                        </h1>
+                        <p class="text-gray-600 dark:text-gray-400">
+                            Gestiona los pacientes del centro médico
+                        </p>
+                    </div>
+                    <PSButton 
+                        variant="primary"
+                        :icon-left="Plus"
+                        @click="openCreateModal"
+                    >
+                        Nuevo Paciente
+                    </PSButton>
+                </div>
+
+                <!-- Cards de estadísticas usando PSStatsCard -->
+                <div class="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+                    <PSStatsCard
+                        title="Total"
+                        :value="stats.total"
+                        subtitle="pacientes registrados"
+                        :icon="Heart"
+                        height="sm"
+                    />
+                    
+                    <PSStatsCard
+                        title="Activos"
+                        :value="stats.active"
+                        value-color="success"
+                        subtitle="pacientes activos"
+                        :icon="UserCheck"
+                        height="sm"
+
+                    />
+                    
+                    <PSStatsCard
+                        title="Con Obra Social"
+                        :value="stats.withInsurance"
+                        value-color="info"
+                        subtitle="tienen cobertura médica"
+                        :icon="Shield"
+                        height="sm"
+                    />
+                    
+                    <PSStatsCard
+                        title="Sin Obra Social"
+                        :value="stats.withoutInsurance"
+                        value-color="warning"
+                        subtitle="sin cobertura médica"
+                        :icon="ShieldAlert"
+                        height="sm"
+                    />
+                </div>
+            </div>
+
+            <!-- Filtros usando PSFilterCard -->
+            <PSFilterCard
+                title="Filtros y Búsqueda"
+                :icon="Filter"
+                layout="flex"
+                :has-active-filters="hasActiveFilters"
+                @clear-filters="clearFilters"
+                class-name="py-3"
+            >
+                <div class="flex flex-wrap items-end gap-3">
+                    <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Buscar
+                    </label>
+                    <Input
+                        v-model="searchTerm"
+                        placeholder="Buscar por nombre, DNI o email..."
+                        :class="puntoSaludTheme.input.search"
+                    />
+                </div>
+
+                <!-- Filtro por obra social -->
+                <div>
+                    <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Obra Social
+                    </label>
+                    <Select v-model="selectedHealthInsurance">
+                        <SelectTrigger class="mt-1">
+                            <SelectValue placeholder="Todas las obras sociales" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todas las obras sociales</SelectItem>
+                            <SelectItem value="none">Sin obra social</SelectItem>
+                            <SelectItem 
+                                v-for="insurance in healthInsurances" 
+                                :key="insurance" 
+                                :value="insurance"
+                            >
+                                {{ insurance }}
+                            </SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <!-- Filtro por rango de edad -->
+                <div>
+                    <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Rango de Edad
+                    </label>
+                    <Select v-model="selectedAgeRange">
+                        <SelectTrigger class="mt-1">
+                            <SelectValue placeholder="Todas las edades" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todas las edades</SelectItem>
+                            <SelectItem value="Menor">Menores (0-17)</SelectItem>
+                            <SelectItem value="18-30">Jóvenes (18-30)</SelectItem>
+                            <SelectItem value="31-50">Adultos (31-50)</SelectItem>
+                            <SelectItem value="51-70">Mayores (51-70)</SelectItem>
+                            <SelectItem value="70+">Ancianos (70+)</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <!-- Filtro por estado -->
+                <div>
+                    <label class="text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Estado
+                    </label>
+                    <Select v-model="selectedStatus">
+                        <SelectTrigger class="mt-1">
+                            <SelectValue placeholder="Todos los estados" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="all">Todos</SelectItem>
+                            <SelectItem value="active">Activos</SelectItem>
+                            <SelectItem value="inactive">Inactivos</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <!-- Contador de resultados -->
+                <div class="flex items-end">
+                    <div class="text-sm text-gray-600 dark:text-gray-400">
+                        <strong>{{ filteredPatients.length }}</strong> de 
+                        <strong>{{ stats.total }}</strong> pacientes
+                    </div>
+                </div>
+            </PSFilterCard>
+
+            <!-- Tabla de pacientes usando PSCard -->
+            <PSCard
+                title="Lista de Pacientes"
+                :icon="Users"
+                variant="default"
+            >
+                <div class="rounded-md border border-green-200/50 dark:border-green-800/30">
+                    <Table>
+                        <TableHeader>
+                            <TableRow class="border-green-200/50 dark:border-green-800/30">
+                                <TableHead class="text-gray-700 dark:text-gray-300">Paciente</TableHead>
+                                <TableHead class="text-gray-700 dark:text-gray-300">DNI</TableHead>
+                                <TableHead class="text-gray-700 dark:text-gray-300">Contacto</TableHead>
+                                <TableHead class="text-gray-700 dark:text-gray-300">Edad</TableHead>
+                                <TableHead class="text-gray-700 dark:text-gray-300">Obra Social</TableHead>
+                                <TableHead class="text-gray-700 dark:text-gray-300">Estado</TableHead>
+                                <TableHead class="text-right text-gray-700 dark:text-gray-300">Acciones</TableHead>
+                            </TableRow>
+                        </TableHeader>
+                        <TableBody>
+                            <!-- Estado vacío -->
+                            <TableRow v-if="filteredPatients.length === 0">
+                                <TableCell colspan="7" class="h-24 text-center">
+                                    <div class="flex flex-col items-center gap-3">
+                                        <Users class="h-12 w-12 text-gray-400 dark:text-gray-600" />
+                                        <p class="text-gray-600 dark:text-gray-400">
+                                            No se encontraron pacientes
+                                        </p>
+                                        <PSButton 
+                                            variant="outline" 
+                                            size="sm" 
+                                            @click="clearFilters"
+                                        >
+                                            Limpiar filtros
+                                        </PSButton>
+                                    </div>
+                                </TableCell>
+                            </TableRow>
+                            
+                            <!-- Filas de pacientes -->
+                            <TableRow 
+                                v-for="patient in filteredPatients" 
+                                :key="patient.id"
+                                class="border-green-200/30 hover:bg-green-50/30 dark:border-green-800/30 dark:hover:bg-green-950/20 transition-colors duration-200"
+                            >
+                                <!-- Paciente -->
+                                <TableCell class="font-medium">
+                                    <div class="flex items-center gap-3">
+                                        <div class="flex h-10 w-10 items-center justify-center rounded-lg bg-green-100 dark:bg-green-900/30">
+                                            <Heart :class="getIconClasses('primary', 'md')" />
+                                        </div>
+                                        <div>
+                                            <p class="font-semibold text-gray-900 dark:text-white">
+                                                {{ patient.first_name }} {{ patient.last_name }}
+                                            </p>
+                                            <p class="text-sm text-gray-600 dark:text-gray-400">
+                                                ID: {{ patient.id }}
+                                            </p>
+                                        </div>
+                                    </div>
+                                </TableCell>
+                                
+                                <!-- DNI -->
+                                <TableCell class="font-mono text-sm">
+                                    {{ patient.dni }}
+                                </TableCell>
+                                
+                                <!-- Contacto -->
+                                <TableCell>
+                                    <div class="space-y-1">
+                                        <p class="text-sm font-medium text-gray-900 dark:text-white">
+                                            {{ patient.email || 'Sin email' }}
+                                        </p>
+                                        <p class="text-sm text-gray-600 dark:text-gray-400">
+                                            {{ patient.phone }}
+                                        </p>
+                                    </div>
+                                </TableCell>
+                                
+                                <!-- Edad -->
+                                <TableCell>
+                                    <div class="text-center">
+                                        <p class="font-semibold text-gray-900 dark:text-white">
+                                            {{ calculateAge(patient.birth_date) }}
+                                        </p>
+                                        <p class="text-xs text-gray-500 dark:text-gray-400">
+                                            años
+                                        </p>
+                                    </div>
+                                </TableCell>
+                                
+                                <!-- Obra Social -->
+                                <TableCell>
+                                    <Badge 
+                                        v-if="patient.health_insurance"
+                                        :class="getStatusClasses('info')"
+                                    >
+                                        {{ patient.health_insurance }}
+                                    </Badge>
+                                    <Badge 
+                                        v-else
+                                        :class="getStatusClasses('cancelled')"
+                                    >
+                                        Sin obra social
+                                    </Badge>
+                                </TableCell>
+                                
+                                <!-- Estado -->
+                                <TableCell>
+                                    <Badge :class="getStatusClasses(patient.is_active ? 'active' : 'inactive')">
+                                        {{ patient.is_active ? 'Activo' : 'Inactivo' }}
+                                    </Badge>
+                                </TableCell>
+                                
+                                <!-- Acciones -->
+                                <TableCell class="text-right">
+                                    <DropdownMenu>
+                                        <DropdownMenuTrigger as-child>
+                                            <PSButton variant="ghost" size="sm">
+                                                <MoreHorizontal class="h-4 w-4" />
+                                            </PSButton>
+                                        </DropdownMenuTrigger>
+                                        <DropdownMenuContent align="end" class="w-48">
+                                            <DropdownMenuItem 
+                                                @click="openEditModal(patient)"
+                                                class="cursor-pointer"
+                                            >
+                                                <Edit class="mr-2 h-4 w-4" />
+                                                Editar
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem 
+                                                @click="toggleStatus(patient)"
+                                                class="cursor-pointer"
+                                            >
+                                                <component 
+                                                    :is="patient.is_active ? UserX : UserCheck" 
+                                                    class="mr-2 h-4 w-4" 
+                                                />
+                                                {{ patient.is_active ? 'Desactivar' : 'Activar' }}
+                                            </DropdownMenuItem>
+                                        </DropdownMenuContent>
+                                    </DropdownMenu>
+                                </TableCell>
+                            </TableRow>
+                        </TableBody>
+                    </Table>
+                </div>
+            </PSCard>
+
+            <!-- Modal (mantener el existente) -->
+            <PatientModal
+                :open="modalOpen"
+                :patient="editingPatient"
+                @close="modalOpen = false"
+                @success="handleModalSuccess"
+            />
+        </div>
+    </AppLayout>
+</template>
+
 <script setup lang="ts">
 import AppLayout from '@/layouts/AppLayout.vue';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { 
@@ -24,26 +338,38 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+
+// Importar nuestros componentes PS
+import PSCard from '@/components/punto-salud/PSCard.vue';
+import PSButton from '@/components/punto-salud/PSButton.vue';
+import PSStatsCard from '@/components/punto-salud/PSStatsCard.vue';
+import PSFilterCard from '@/components/punto-salud/PSFilterCard.vue';
+
+// Importar tema y utilidades
+import puntoSaludTheme, { getStatusClasses, getIconClasses } from '@/theme/PuntoSaludTheme.js';
+
 import { type BreadcrumbItem } from '@/types';
 import { Head, router } from '@inertiajs/vue3';
 import { 
     Plus, 
     Search, 
     MoreHorizontal, 
-    Eye, 
     Edit, 
     UserCheck, 
     UserX,
     Filter,
     Calendar,
-    Heart
+    Heart,
+    Users,
+    Shield,
+    ShieldAlert
 } from 'lucide-vue-next';
 import { ref, computed } from 'vue';
 
-// Import del modal
+// Import del modal existente
 import PatientModal from './PatientModal.vue';
 
+// Interfaces (mantener las existentes)
 interface Patient {
     id: number;
     first_name: string;
@@ -72,17 +398,25 @@ const breadcrumbs: BreadcrumbItem[] = [
     { title: 'Pacientes', href: '/patients' },
 ];
 
-// Estados reactivos para filtros
+// Estados reactivos para filtros (mantener lógica existente)
 const searchTerm = ref('');
 const selectedHealthInsurance = ref('all');
 const selectedStatus = ref('all');
 const selectedAgeRange = ref('all');
 
-// Estados del modal
+// Estados del modal (mantener lógica existente)
 const modalOpen = ref(false);
 const editingPatient = ref<Patient | null>(null);
 
-// Opciones de filtros
+// Computed para detectar filtros activos
+const hasActiveFilters = computed(() => {
+    return searchTerm.value !== '' || 
+           selectedHealthInsurance.value !== 'all' || 
+           selectedStatus.value !== 'all' ||
+           selectedAgeRange.value !== 'all';
+});
+
+// Opciones de filtros (mantener lógica existente)
 const healthInsurances = computed(() => {
     const uniqueInsurances = props.patients
         .filter(p => p.health_insurance)
@@ -92,13 +426,14 @@ const healthInsurances = computed(() => {
             }
             return acc;
         }, [] as string[]);
+    
     return uniqueInsurances.sort();
 });
 
 // Función para calcular edad
-const calculateAge = (birthDate: string): number => {
-    const birth = new Date(birthDate);
+const calculateAge = (birthDate: string) => {
     const today = new Date();
+    const birth = new Date(birthDate);
     let age = today.getFullYear() - birth.getFullYear();
     const monthDiff = today.getMonth() - birth.getMonth();
     
@@ -109,8 +444,9 @@ const calculateAge = (birthDate: string): number => {
     return age;
 };
 
-// Función para obtener rango de edad
-const getAgeRange = (age: number): string => {
+// Función para filtrar por rango de edad
+const getAgeRange = (birthDate: string) => {
+    const age = calculateAge(birthDate);
     if (age < 18) return 'Menor';
     if (age <= 30) return '18-30';
     if (age <= 50) return '31-50';
@@ -118,7 +454,7 @@ const getAgeRange = (age: number): string => {
     return '70+';
 };
 
-// Pacientes filtrados
+// Pacientes filtrados (mantener lógica existente)
 const filteredPatients = computed(() => {
     return props.patients.filter(patient => {
         // Filtro por búsqueda (nombre completo, DNI, email)
@@ -129,8 +465,8 @@ const filteredPatients = computed(() => {
 
         // Filtro por obra social
         const insuranceMatch = selectedHealthInsurance.value === 'all' || 
-            patient.health_insurance === selectedHealthInsurance.value ||
-            (selectedHealthInsurance.value === 'sin_obra_social' && !patient.health_insurance);
+            (selectedHealthInsurance.value === 'none' && !patient.health_insurance) ||
+            patient.health_insurance === selectedHealthInsurance.value;
 
         // Filtro por estado
         const statusMatch = selectedStatus.value === 'all' || 
@@ -139,24 +475,23 @@ const filteredPatients = computed(() => {
 
         // Filtro por rango de edad
         const ageMatch = selectedAgeRange.value === 'all' || 
-            getAgeRange(calculateAge(patient.birth_date)) === selectedAgeRange.value;
+            getAgeRange(patient.birth_date) === selectedAgeRange.value;
 
         return searchMatch && insuranceMatch && statusMatch && ageMatch;
     });
 });
 
-// Estadísticas
+// Estadísticas (mantener lógica existente)
 const stats = computed(() => {
     const total = props.patients.length;
     const active = props.patients.filter(p => p.is_active).length;
-    const inactive = total - active;
     const withInsurance = props.patients.filter(p => p.health_insurance).length;
     const withoutInsurance = total - withInsurance;
 
-    return { total, active, inactive, withInsurance, withoutInsurance };
+    return { total, active, withInsurance, withoutInsurance };
 });
 
-// Funciones del modal
+// Funciones del modal (mantener lógica existente)
 const openCreateModal = () => {
     editingPatient.value = null;
     modalOpen.value = true;
@@ -172,7 +507,7 @@ const handleModalSuccess = () => {
     router.reload({ only: ['patients'] });
 };
 
-// Funciones de acciones
+// Funciones de acciones (mantener lógica existente)
 const toggleStatus = (patient: Patient) => {
     const action = patient.is_active ? 'desactivar' : 'activar';
     if (confirm(`¿Estás seguro de ${action} este paciente?`)) {
@@ -196,303 +531,18 @@ const clearFilters = () => {
 };
 </script>
 
-<template>
-    <Head title="Pacientes" />
-
-    <AppLayout :breadcrumbs="breadcrumbs">
-        <div class="flex h-full flex-1 flex-col gap-6 p-4">
-            
-            <!-- Header con estadísticas -->
-            <div class="flex flex-col gap-4">
-                <div class="flex items-center justify-between">
-                    <div>
-                        <h1 class="text-2xl font-bold tracking-tight">Pacientes</h1>
-                        <p class="text-muted-foreground">
-                            Gestiona los pacientes del centro médico
-                        </p>
-                    </div>
-                    <Button @click="openCreateModal">
-                        <Plus class="mr-2 h-4 w-4" />
-                        Nuevo Paciente
-                    </Button>
-                </div>
-
-                <!-- Cards de estadísticas -->
-                <div class="grid gap-4 md:grid-cols-4">
-                    <Card>
-                        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle class="text-sm font-medium">Total</CardTitle>
-                            <Heart class="h-4 w-4 text-muted-foreground" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold">{{ stats.total }}</div>
-                            <p class="text-xs text-muted-foreground">
-                                pacientes registrados
-                            </p>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card>
-                        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle class="text-sm font-medium">Activos</CardTitle>
-                            <UserCheck class="h-4 w-4 text-green-600" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold text-green-600">{{ stats.active }}</div>
-                            <p class="text-xs text-muted-foreground">
-                                pacientes activos
-                            </p>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card>
-                        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle class="text-sm font-medium">Con Obra Social</CardTitle>
-                            <Heart class="h-4 w-4 text-blue-600" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold text-blue-600">{{ stats.withInsurance }}</div>
-                            <p class="text-xs text-muted-foreground">
-                                tienen cobertura médica
-                            </p>
-                        </CardContent>
-                    </Card>
-                    
-                    <Card>
-                        <CardHeader class="flex flex-row items-center justify-between space-y-0 pb-2">
-                            <CardTitle class="text-sm font-medium">Sin Obra Social</CardTitle>
-                            <Heart class="h-4 w-4 text-orange-600" />
-                        </CardHeader>
-                        <CardContent>
-                            <div class="text-2xl font-bold text-orange-600">{{ stats.withoutInsurance }}</div>
-                            <p class="text-xs text-muted-foreground">
-                                sin cobertura médica
-                            </p>
-                        </CardContent>
-                    </Card>
-                </div>
-            </div>
-
-            <!-- Filtros y búsqueda -->
-            <Card>
-                <CardHeader>
-                    <CardTitle class="flex items-center gap-2">
-                        <Filter class="h-4 w-4" />
-                        Filtros y Búsqueda
-                    </CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
-                        <!-- Búsqueda -->
-                        <div class="md:col-span-2">
-                            <label class="text-sm font-medium">Buscar</label>
-                            <div class="relative">
-                                <Search class="absolute left-2 top-2.5 h-4 w-4 text-muted-foreground" />
-                                <Input
-                                    v-model="searchTerm"
-                                    placeholder="Buscar por nombre, DNI o email..."
-                                    class="pl-8"
-                                />
-                            </div>
-                        </div>
-
-                        <!-- Filtro por obra social -->
-                        <div>
-                            <label class="text-sm font-medium">Obra Social</label>
-                            <Select v-model="selectedHealthInsurance">
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Todas" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todas</SelectItem>
-                                    <SelectItem value="sin_obra_social">Sin obra social</SelectItem>
-                                    <SelectItem 
-                                        v-for="insurance in healthInsurances" 
-                                        :key="insurance" 
-                                        :value="insurance"
-                                    >
-                                        {{ insurance }}
-                                    </SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <!-- Filtro por rango de edad -->
-                        <div>
-                            <label class="text-sm font-medium">Edad</label>
-                            <Select v-model="selectedAgeRange">
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Todas" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todas las edades</SelectItem>
-                                    <SelectItem value="Menor">Menores (0-17)</SelectItem>
-                                    <SelectItem value="18-30">Jóvenes (18-30)</SelectItem>
-                                    <SelectItem value="31-50">Adultos (31-50)</SelectItem>
-                                    <SelectItem value="51-70">Mayores (51-70)</SelectItem>
-                                    <SelectItem value="70+">Ancianos (70+)</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-
-                        <!-- Filtro por estado -->
-                        <div>
-                            <label class="text-sm font-medium">Estado</label>
-                            <Select v-model="selectedStatus">
-                                <SelectTrigger>
-                                    <SelectValue placeholder="Todos" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="all">Todos</SelectItem>
-                                    <SelectItem value="active">Activos</SelectItem>
-                                    <SelectItem value="inactive">Inactivos</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    </div>
-
-                    <!-- Botón limpiar filtros y contador -->
-                    <div class="flex justify-between items-center mt-4">
-                        <div class="text-sm text-muted-foreground">
-                            Mostrando {{ filteredPatients.length }} de {{ stats.total }} pacientes
-                        </div>
-                        <Button variant="outline" @click="clearFilters">
-                            Limpiar filtros
-                        </Button>
-                    </div>
-                </CardContent>
-            </Card>
-
-            <!-- Tabla de pacientes -->
-            <Card>
-                <CardHeader>
-                    <CardTitle>Lista de Pacientes</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    <div class="rounded-md border">
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>Paciente</TableHead>
-                                    <TableHead>DNI / Edad</TableHead>
-                                    <TableHead>Contacto</TableHead>
-                                    <TableHead>Obra Social</TableHead>
-                                    <TableHead>Estado</TableHead>
-                                    <TableHead class="text-right">Acciones</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                <TableRow v-if="filteredPatients.length === 0">
-                                    <TableCell colspan="6" class="h-24 text-center">
-                                        <div class="flex flex-col items-center gap-2">
-                                            <p class="text-muted-foreground">No se encontraron pacientes</p>
-                                            <Button variant="outline" size="sm" @click="clearFilters">
-                                                Limpiar filtros
-                                            </Button>
-                                        </div>
-                                    </TableCell>
-                                </TableRow>
-                                
-                                <TableRow 
-                                    v-for="patient in filteredPatients" 
-                                    :key="patient.id"
-                                    :class="{ 'opacity-60': !patient.is_active }"
-                                >
-                                    <!-- Paciente -->
-                                    <TableCell>
-                                        <div class="flex flex-col">
-                                            <span class="font-medium">
-                                                {{ patient.first_name }} {{ patient.last_name }}
-                                            </span>
-                                            <span class="text-sm text-muted-foreground">
-                                                {{ patient.email || 'Sin email' }}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-
-                                    <!-- DNI / Edad -->
-                                    <TableCell>
-                                        <div class="flex flex-col">
-                                            <Badge variant="outline" class="font-mono w-fit">
-                                                {{ patient.dni }}
-                                            </Badge>
-                                            <span class="text-sm text-muted-foreground mt-1">
-                                                {{ calculateAge(patient.birth_date) }} años
-                                            </span>
-                                        </div>
-                                    </TableCell>
-
-                                    <!-- Contacto -->
-                                    <TableCell>
-                                        <div class="flex flex-col">
-                                            <span class="text-sm">{{ patient.phone }}</span>
-                                            <span class="text-xs text-muted-foreground">
-                                                {{ patient.address || 'Sin dirección' }}
-                                            </span>
-                                        </div>
-                                    </TableCell>
-
-                                    <!-- Obra Social -->
-                                    <TableCell>
-                                        <div v-if="patient.health_insurance" class="flex flex-col">
-                                            <Badge variant="secondary" class="w-fit">
-                                                {{ patient.health_insurance }}
-                                            </Badge>
-                                            <span v-if="patient.health_insurance_number" class="text-xs text-muted-foreground mt-1">
-                                                N° {{ patient.health_insurance_number }}
-                                            </span>
-                                        </div>
-                                        <span v-else class="text-sm text-muted-foreground">
-                                            Sin obra social
-                                        </span>
-                                    </TableCell>
-
-                                    <!-- Estado -->
-                                    <TableCell>
-                                        <Badge :variant="patient.is_active ? 'default' : 'destructive'">
-                                            {{ patient.is_active ? 'Activo' : 'Inactivo' }}
-                                        </Badge>
-                                    </TableCell>
-
-                                    <!-- Acciones -->
-                                    <TableCell class="text-right">
-                                        <DropdownMenu>
-                                            <DropdownMenuTrigger as-child>
-                                                <Button variant="ghost" class="h-8 w-8 p-0">
-                                                    <span class="sr-only">Abrir menú</span>
-                                                    <MoreHorizontal class="h-4 w-4" />
-                                                </Button>
-                                            </DropdownMenuTrigger>
-                                            <DropdownMenuContent align="end">
-                                                <DropdownMenuItem @click="openEditModal(patient)">
-                                                    <Edit class="mr-2 h-4 w-4" />
-                                                    Editar
-                                                </DropdownMenuItem>
-                                                
-                                                <DropdownMenuItem 
-                                                    @click="toggleStatus(patient)"
-                                                    :class="patient.is_active ? 'text-red-600' : 'text-green-600'"
-                                                >
-                                                    <UserX v-if="patient.is_active" class="mr-2 h-4 w-4" />
-                                                    <UserCheck v-else class="mr-2 h-4 w-4" />
-                                                    {{ patient.is_active ? 'Desactivar' : 'Activar' }}
-                                                </DropdownMenuItem>
-                                            </DropdownMenuContent>
-                                        </DropdownMenu>
-                                    </TableCell>
-                                </TableRow>
-                            </TableBody>
-                        </Table>
-                    </div>
-                </CardContent>
-            </Card>
-        </div>
-
-        <!-- Modal de Paciente -->
-        <PatientModal
-            v-model:open="modalOpen"
-            :patient="editingPatient"
-            @success="handleModalSuccess"
-        />
-    </AppLayout>
-</template>
+<style scoped>
+/* Estilos adicionales para mejorar la tabla */
+.table-row-hover {
+    transition-property: background-color, color;
+    transition-duration: 200ms;
+}
+.table-row-hover:hover {
+    background-color: rgba(34, 197, 94, 0.3); /* green-50/30 */
+}
+@media (prefers-color-scheme: dark) {
+    .table-row-hover:hover {
+        background-color: rgba(20, 83, 45, 0.2); /* green-950/20 */
+    }
+}
+</style>
